@@ -1,0 +1,114 @@
+cabal-version: 3.4
+name:          plinth-plutarch-paper-code
+version:       0.1.0.0
+synopsis:      Plinth and Plutarch paper codes
+license:       BSD-3-Clause
+author:        Seungheon Oh <seungheon.oh@iohk.io>
+build-type:    Simple
+
+common base
+  build-depends: base >=4.9 && <5
+
+common project-config
+  default-language:   Haskell2010
+  default-extensions:
+    BangPatterns
+    DataKinds
+    DeriveAnyClass
+    DeriveGeneric
+    DerivingStrategies
+    DerivingVia
+    FlexibleInstances
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    InstanceSigs
+    LambdaCase
+    MultiWayIf
+    NumericUnderscores
+    OverloadedRecordDot
+    OverloadedStrings
+    QualifiedDo
+    RankNTypes
+    ScopedTypeVariables
+    StandaloneDeriving
+    TypeApplications
+    TypeFamilies
+    TypeFamilyDependencies
+    TypeOperators
+    UndecidableInstances
+    ViewPatterns
+
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+    -Wno-unused-packages -Wnoncanonical-monad-instances
+    -Wincomplete-uni-patterns -Wincomplete-record-updates
+    -Wredundant-constraints -Widentities -fobject-code
+    -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
+    -fno-specialise -fno-omit-interface-pragmas -Wmissing-export-lists
+    -Wmissing-import-lists -Wmissing-deriving-strategies
+
+library
+  import:          base, project-config
+  hs-source-dirs:  src
+  exposed-modules:
+    Example
+    SmartTokens.Contracts.ProgrammableLogicBase
+    SmartTokens.Contracts.ProgrammableLogicBasePlinth
+    SmartTokens.Types.Constants
+    SmartTokens.Types.ProtocolParams
+    SmartTokens.Types.PTokenDirectory
+
+  build-depends:
+    , generics-sop
+    , plutarch
+    , plutarch-ledger-api
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+    , plutus-tx-plugin
+    , text
+
+executable bench-programmable-logic-scripts
+  import:         base, project-config
+  hs-source-dirs: app test
+  main-is:        BenchScripts.hs
+  ghc-options:
+    -threaded -rtsopts -Wno-missing-import-lists
+    -Wno-missing-export-lists
+
+  other-modules:  ProgrammableTokens.Test.ScriptContext.Builder
+  build-depends:
+    , bytestring
+    , plinth-plutarch-paper-code
+    , plutarch
+    , plutarch-ledger-api
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+
+test-suite conformance-tests
+  import:         base, project-config
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Spec.hs
+  ghc-options:
+    -threaded -rtsopts -Wno-missing-import-lists
+    -Wno-missing-export-lists
+
+  other-modules:
+    ProgrammableTokens.Test.ProgrammableLogicGlobal
+    ProgrammableTokens.Test.ScriptContext.Builder
+
+  build-depends:
+    , bytestring
+    , plinth-plutarch-paper-code
+    , plutarch
+    , plutarch-ledger-api
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+    , QuickCheck
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck

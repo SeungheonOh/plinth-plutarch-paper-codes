@@ -1,0 +1,15 @@
+---
+- ignore: {name: Use <$>}
+- ignore: {name: Avoid lambda}
+- ignore: {name: Avoid lambda using `infix`}
+- ignore: {name: Replace case with fromMaybe}
+- ignore: {name: Use infix}
+- ignore: {name: Parse error}
+- ignore: {name: Use asks}
+- ignore: {name: Use fromMaybe}
+- ignore: {name: Use section}
+- ignore: {name: Unused LANGUAGE pragma }
+- ignore: {name: Missing NOINLINE pragma}
+- ignore: {name: Redundant bang pattern}
+- ignore: {name: Use camelCase}
+- ignore: {name: Eta reduce}
