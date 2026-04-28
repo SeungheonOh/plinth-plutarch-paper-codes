@@ -45,32 +45,37 @@ import PlutusTx qualified
 import SmartTokens.Types.PTokenDirectory (PDirectorySetNode (..))
 import SmartTokens.Types.ProtocolParams (PProgrammableLogicGlobalParams (..))
 
+-- ============================================================================
+-- 1. Plutarch infrastructure
+-- ============================================================================
+-- Plinth: compiledCodeToScript, dataEqual
+
 type PType = S -> Type
 type ClosedTerm (a :: PType) = forall (s :: S). Term s a
-
-paddressCredential :: Term s PAddress -> Term s PCredential
-paddressCredential addr = pmatch addr $ \addr' -> paddress'credential addr'
-
-pscriptContextTxInfo :: Term s PScriptContext -> Term s PTxInfo
-pscriptContextTxInfo ctx = pmatch ctx $ \ctx' -> pscriptContext'txInfo ctx'
-
-ptxInInfoResolved :: Term s PTxInInfo -> Term s PTxOut
-ptxInInfoResolved txInInfo = pmatch txInInfo $ \txInInfo' -> ptxInInfo'resolved txInInfo'
-
-ptxOutDatum :: Term s PTxOut -> Term s POutputDatum
-ptxOutDatum = flip pmatch $ \txo -> ptxOut'datum txo
-
-ptxOutValue :: Term s PTxOut -> Term s (PAsData (PValue 'Sorted 'Positive))
-ptxOutValue = flip pmatch $ \txo -> ptxOut'value txo
-
-pisRewardingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisRewardingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
 
 pmapData :: Term s (PBuiltinList (PBuiltinPair PData PData) :--> PData)
 pmapData = punsafeBuiltin PLC.MapData
 
 ppairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
 ppairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
+
+-- | Unsafely unwrap a PMaybeData known to be Just.
+pjustData :: Term s (PMaybeData a) -> Term s a
+pjustData term =
+  punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))
+
+pand'List :: [Term s PBool] -> Term s PBool
+pand'List ts' = case ts' of
+  [] -> pconstant True
+  ts -> foldl1 (\res x -> pand' # res # x) ts
+
+pvalidateConditions :: [Term s PBool] -> Term s PUnit
+pvalidateConditions conds = pif (pand'List conds) (pconstant ()) perror
+
+-- ============================================================================
+-- 2. List operations
+-- ============================================================================
+-- Plinth: dropList, listLength, appendList, pkhElem, isNullList, indexList
 
 pnTails :: (PIsListLike list a) => Integer -> Term s (list a) -> Term s (list a)
 pnTails n xs = foldl' (\acc _ -> ptail # acc) xs (replicate (fromIntegral n) ())
@@ -116,101 +121,20 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
           (currentCount + pbuiltinListLength 0 # xs)
    in go # n # 0 # elems
 
-pand'List :: [Term s PBool] -> Term s PBool
-pand'List ts' = case ts' of
-  [] -> pconstant True
-  ts -> foldl1 (\res x -> pand' # res # x) ts
+-- ============================================================================
+-- 3. Value helpers
+-- ============================================================================
+-- Plinth: valueToSortedList, sortedListToValue, emptyValue, stripAda,
+--         tokenPairsUnion, currencyPairsUnion, valueUnion, assetQtyInValue,
+--         tokensForCurrencySymbol, negateTokens, subtractTokens, tokenPairsContain
 
-ptxSignedByPkh :: Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
-ptxSignedByPkh = pelem
-
-pvalidateConditions :: [Term s PBool] -> Term s PUnit
-pvalidateConditions conds = pif (pand'List conds) (pconstant ()) perror
-
-penforceNSpendRedeemers :: Term s PInteger -> Term s (PMap 'Unsorted PScriptPurpose PRedeemer) -> Term s PBool
-penforceNSpendRedeemers n rdmrs =
-  let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
-      isNonSpend red = pnot # (pfstBuiltin # (pasConstr # pforgetData red) #== 1)
-      isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
-      isLastSpend = plam $ \redeemers ->
-        let constrPair = pfstBuiltin # (phead # redeemers)
-            constrIdx = pfstBuiltin # (pasConstr # pforgetData constrPair)
-         in pif
-              (constrIdx #== 1)
-              (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
-              perror
-   in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
-
-{- | Unsafely unwrap a `PMaybeData` known by the caller to be `Just`.
-
-High-level purpose:
-- Avoid repeated `pmatch` boilerplate when surrounding logic has already established
-  presence of the inner value.
-
-Security invariants:
-- The caller must prove the input is `Just`; using this on `Nothing` is invalid.
-- This helper must not be used to bypass missing-datum or missing-stake checks.
-- The extracted payload must be interpreted at the same type it was encoded with.
--}
-pjustData :: Term s (PMaybeData a) -> Term s a
-pjustData term =
-  punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))
-
--- TODO: Replace current corresponding input / output comparison (which compares address, reference script and datum) for multi-seize
--- with constructing the expected output from the input with this function and comparing it to the actual output.
--- Further optimize this with the optimization in the "Everything is possible" UPLC fest presentation.
--- pconstructExpectedOutputWithOutputDatum :: Term s PAddress -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s POutputDatum -> Term s (PAsData PTxOut)
--- pconstructExpectedOutputWithOutputDatum address value datum =
---   pdata $ pcon $
---     PTxOut
---      { ptxOut'address = address
---      , ptxOut'value = value
---      , ptxOut'datum = datum
---      , ptxOut'referenceScript = pconstant Nothing
---      }
-
--- TODO:
--- The current implementation of the contracts in this module are not designed to be maximally efficient.
--- In the future, this should be optimized to use the redeemer indexing design pattern to not just index the directory nodes in the reference inputs,
--- but also to index the programmable inputs and outputs.
-
-{- | Host-side empty `Value` constant used to build onchain empty values.
-
-High-level purpose:
-- Provide a single canonical zero value for coercion into Plutarch terms.
-
-Security invariants:
-- This must remain exactly `mempty`; any non-zero asset would corrupt every caller.
-- It must not depend on transaction data or redeemer-controlled inputs.
--}
 emptyValue :: Value
 emptyValue = mempty
 
-{- | Canonical onchain empty non-Ada value.
-
-High-level purpose:
-- Seed value accumulators that track programmable assets.
-
-Security invariants:
-- The value must stay empty for all policies and token names.
-- It is only sound to coerce emptiness to a positive sorted value because emptiness
-  trivially satisfies both properties.
--}
 pemptyLedgerValue :: Term s (PValue 'Sorted 'Positive)
 pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
 
-{- | Strip Ada from a ledger-provided value while preserving the remaining order.
-
-High-level purpose:
-- Remove the always-present Ada entry so later mini-ledger accounting can operate
-  only on non-Ada assets.
-
-Security invariants:
-- The input must be a ledger-provided sorted value where Ada is the first entry.
-- The helper must preserve the order and quantities of all non-Ada entries.
-- It must not be used on synthetic values whose ordering does not follow ledger
-  conventions.
--}
+-- | Strip Ada (first entry) from a ledger-provided sorted value.
 pstripAdaH
   :: forall (v :: AmountGuarantees) (s :: S)
    . Term s (PValue 'Sorted v) -> Term s (PValue 'Sorted v)
@@ -218,19 +142,7 @@ pstripAdaH value =
   let nonAdaValueMapInner = ptail # pto (pto value)
    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
 
-{- | Merge two sorted token-name maps by asset-wise addition.
-
-High-level purpose:
-- Support fast programmable-token balance accumulation without rebuilding full
-  `Value`s.
-
-Security invariants:
-- Both inputs must be sorted by token name and internally duplicate-free.
-- Matching token names must be added exactly once; non-matching entries must be
-  preserved unchanged.
-- The output must remain sorted, because later containment and delta checks rely
-  on monotonic order.
--}
+-- | Merge two sorted token-name maps by asset-wise addition.
 ptokenPairsUnionFast
   :: Term
        s
@@ -268,20 +180,7 @@ ptokenPairsUnionFast = phoistAcyclic $
       tokensB
       tokensA
 
-{- | Merge two sorted currency-symbol maps by asset-wise addition.
-
-High-level purpose:
-- Provide a linear merge for full `Value` accumulation when multiple policy maps
-  must be combined.
-
-Security invariants:
-- Inputs must be sorted by currency symbol and each inner token map must itself be
-  sorted and duplicate-free.
-- Asset quantities must be combined only for equal currency symbols and equal token
-  names.
-- The resulting outer and inner maps must stay sorted for downstream lookups and
-  containment checks.
--}
+-- | Merge two sorted currency-symbol maps by asset-wise addition.
 pcurrencyPairsUnionFast
   :: Term
        s
@@ -325,17 +224,7 @@ pcurrencyPairsUnionFast = phoistAcyclic $
       csPairsB
       csPairsA
 
-{- | Add two non-Ada sorted `Value`s while preserving canonical ordering.
-
-High-level purpose:
-- Centralize asset-wise value addition used throughout transfer and mint
-  accounting.
-
-Security invariants:
-- Callers must only pass sorted positive values.
-- No asset may be dropped, duplicated, or reordered outside the merge rules.
-- The output must remain a valid sorted positive value.
--}
+-- | Add two sorted non-Ada Values.
 pvalueUnionFast :: Term s (PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive)
 pvalueUnionFast = phoistAcyclic $ plam $ \valueA valueB ->
   pcon $
@@ -346,20 +235,192 @@ pvalueUnionFast = phoistAcyclic $ plam $ \valueA valueB ->
             # pto (pto valueA)
             # pto (pto valueB)
 
-{- | Check whether a specific stake-script credential appears in withdrawals.
+-- | Get the quantity of a specific asset in a value.
+passetQtyInValue
+  :: Term
+       s
+       ( PValue 'Sorted 'Positive
+           :--> PCurrencySymbol
+           :--> PTokenName
+           :--> PInteger
+       )
+passetQtyInValue = phoistAcyclic $ plam $ \value cs tn ->
+  let tokenQtyInTokenPairs = pfix #$ plam $ \self remainingTokenPairs ->
+        pelimList
+          ( \tokenPair tokenPairsRest ->
+              let tokenName = pfromData (pfstBuiltin # tokenPair)
+                  tokenQty = pfromData (psndBuiltin # tokenPair)
+               in pif
+                    (tokenName #== tn)
+                    tokenQty
+                    ( pif
+                        (tn #< tokenName)
+                        0
+                        (self # tokenPairsRest)
+                    )
+          )
+          0
+          remainingTokenPairs
+      tokenQtyInCurrencyPairs = pfix #$ plam $ \self remainingCurrencyPairs ->
+        pelimList
+          ( \currencyPair currencyPairsRest ->
+              let currencySymbol = pfromData (pfstBuiltin # currencyPair)
+                  tokenPairs = pto (pfromData (psndBuiltin # currencyPair))
+               in pif
+                    (currencySymbol #== cs)
+                    (tokenQtyInTokenPairs # tokenPairs)
+                    ( pif
+                        (cs #< currencySymbol)
+                        0
+                        (self # currencyPairsRest)
+                    )
+          )
+          0
+          remainingCurrencyPairs
+   in tokenQtyInCurrencyPairs # pto (pto value)
 
-High-level purpose:
-- Detect whether a stake validator was actually invoked in the current
-  transaction.
+-- | Get token pairs for a specific currency symbol from a sorted value.
+ptokensForCurrencySymbol
+  :: forall anyAmount s
+   . Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+ptokensForCurrencySymbol =
+  phoistAcyclic $
+    plam $ \targetCs mintValue ->
+      let mintedEntries :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
+          mintedEntries = pto (pto mintValue)
+          go = pfix #$ plam $ \self remainingMintEntries ->
+            pelimList
+              ( \mintCsPair mintCsPairs ->
+                  let mintCs = pfromData (pfstBuiltin # mintCsPair)
+                   in pif
+                        (mintCs #== targetCs)
+                        (pto (pfromData (psndBuiltin # mintCsPair)))
+                        (pif (targetCs #< mintCs) pnil (self # mintCsPairs))
+              )
+              pnil
+              remainingMintEntries
+       in go # mintedEntries
 
-Security invariants:
-- The result must be true iff an entry with that credential is present in the
-  withdrawal map.
-- This helper only proves stake-script invocation; callers must not treat it as a
-  spending or minting witness check.
-- Callers must only use it with a non-empty withdrawal list, because the loop
-  assumes one.
--}
+-- | Negate all quantities in a token-name map.
+pnegateTokens :: Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+pnegateTokens = pfix #$ plam $ \self tokens ->
+  pelimList
+    ( \tokenPair tokensRest ->
+        let tokenName = pfstBuiltin # tokenPair
+            tokenAmount = psndBuiltin # tokenPair
+         in pcons # (ppairDataBuiltin # tokenName # pdata (pconstantInteger 0 - pfromData tokenAmount)) # (self # tokensRest)
+    )
+    pnil
+    tokens
+
+-- | Subtract token pairs: input - output, skipping zero results.
+psubtractTokens
+  :: Term
+       s
+       ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+           :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+           :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+       )
+psubtractTokens = phoistAcyclic $
+  pfix #$ plam $ \self inputTokens outputTokens ->
+    pelimList
+      ( \inputPair inputRest ->
+          plet (pfstBuiltin # inputPair) $ \inputTokenName ->
+            let inputTokenAmount = psndBuiltin # inputPair
+             in pelimList
+                  ( \outputPair outputRest ->
+                      let outputTokenName = pfstBuiltin # outputPair
+                          outputTokenAmount = psndBuiltin # outputPair
+                       in pif
+                            (pfromData inputTokenName #<= pfromData outputTokenName)
+                            ( pif
+                                (inputTokenName #== outputTokenName)
+                                ( let diff = pfromData inputTokenAmount - pfromData outputTokenAmount
+                                   in pif
+                                        (diff #== 0)
+                                        (self # inputRest # outputRest)
+                                        ( pcons
+                                            # (ppairDataBuiltin # inputTokenName # pdata diff)
+                                            # (self # inputRest # outputRest)
+                                        )
+                                )
+                                ( let diff = pfromData inputTokenAmount
+                                   in pcons
+                                        # (ppairDataBuiltin # inputTokenName # pdata diff)
+                                        # (self # inputRest # outputTokens)
+                                )
+                            )
+                            ( let diff = pconstantInteger 0 - pfromData outputTokenAmount
+                               in pcons
+                                    # (ppairDataBuiltin # outputTokenName # pdata diff)
+                                    # (self # inputTokens # outputRest)
+                            )
+                  )
+                  inputRest
+                  outputTokens
+      )
+      (pnegateTokens # outputTokens)
+      inputTokens
+
+-- | Check that actualTokens contain at least requiredTokens quantities.
+ptokenPairsContain
+  :: Term
+       s
+       ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+           :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+           :--> PBool
+       )
+ptokenPairsContain = phoistAcyclic $
+  pfix #$ plam $ \self actualTokens requiredTokens ->
+    pelimList
+      ( \requiredPair requiredRest ->
+          let requiredTokenName = pfromData (pfstBuiltin # requiredPair)
+              requiredQty = pfromData (psndBuiltin # requiredPair)
+           in pelimList
+                ( \actualPair actualRest ->
+                    let actualTokenName = pfromData (pfstBuiltin # actualPair)
+                        actualQty = pfromData (psndBuiltin # actualPair)
+                     in pif
+                          (actualTokenName #== requiredTokenName)
+                          (pif (actualQty #>= requiredQty) (self # actualRest # requiredRest) (pconstant False))
+                          ( pif
+                              (actualTokenName #< requiredTokenName)
+                              (self # actualRest # requiredTokens)
+                              (pif (0 #>= requiredQty) (self # actualTokens # requiredRest) (pconstant False))
+                          )
+                )
+                (pif (0 #>= requiredQty) (self # pnil # requiredRest) (pconstant False))
+                actualTokens
+      )
+      (pconstant True)
+      requiredTokens
+
+-- ============================================================================
+-- 4. Credential and address helpers
+-- ============================================================================
+-- Plinth: getPaymentCredential, getStakingCredential
+
+paddressCredential :: Term s PAddress -> Term s PCredential
+paddressCredential addr = pmatch addr $ \addr' -> paddress'credential addr'
+
+pscriptContextTxInfo :: Term s PScriptContext -> Term s PTxInfo
+pscriptContextTxInfo ctx = pmatch ctx $ \ctx' -> pscriptContext'txInfo ctx'
+
+ptxInInfoResolved :: Term s PTxInInfo -> Term s PTxOut
+ptxInInfoResolved txInInfo = pmatch txInInfo $ \txInInfo' -> ptxInInfo'resolved txInInfo'
+
+ptxOutDatum :: Term s PTxOut -> Term s POutputDatum
+ptxOutDatum = flip pmatch $ \txo -> ptxOut'datum txo
+
+ptxOutValue :: Term s PTxOut -> Term s (PAsData (PValue 'Sorted 'Positive))
+ptxOutValue = flip pmatch $ \txo -> ptxOut'value txo
+
+-- ============================================================================
+-- 5. Withdrawal and script info checking
+-- ============================================================================
+-- Plinth: isScriptInvokedEntries, isRewardingScriptInfo, isSpendingPurpose
+
+-- | Check whether a credential appears in withdrawals.
 pisScriptInvokedEntries :: Term s (PAsData PCredential :--> PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)) :--> PBool)
 pisScriptInvokedEntries = phoistAcyclic $ plam $ \scriptCredData withdrawalEntries ->
   let go = pfix #$ plam $ \self entries ->
@@ -374,20 +435,40 @@ pisScriptInvokedEntries = phoistAcyclic $ plam $ \scriptCredData withdrawalEntri
                 )
    in go # withdrawalEntries
 
-{- | Aggregate all non-Ada input value controlled by a payment credential and
-validated owner witness.
+-- | Check if ScriptInfo is a rewarding script.
+pisRewardingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisRewardingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
 
-High-level purpose:
-- Compute the programmable mini-ledger value entering the transaction from inputs
-  locked at the shared payment credential.
+-- | Check if tx is signed by a pubkey hash.
+ptxSignedByPkh :: Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
+ptxSignedByPkh = pelem
 
-Security invariants:
-- Only inputs whose payment credential equals `cred` may contribute to the result.
-- Each contributing input must prove control of its staking credential:
-  `PPubKeyCredential` via a signer, `PScriptCredential` via a withdrawal witness.
-- Missing owner witnesses must fail validation rather than silently omitting value.
-- Ada must be stripped and remaining assets summed exactly once.
--}
+-- ============================================================================
+-- 6. Value CS checking
+-- ============================================================================
+-- Plinth: hasCsFirstNonAda, hasCsFirstNonAdaOrFalse
+
+-- | Check that the first non-Ada policy matches a state-token CS.
+phasCSH :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
+phasCSH directoryNodeCS value =
+  let value' = pto (pto (pfromData value))
+   in pfromData (pfstBuiltin # (phead # (ptail # value'))) #== directoryNodeCS
+
+-- | Safe variant that returns False instead of crashing on missing non-Ada entries.
+phasCSHOrFalse :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
+phasCSHOrFalse directoryNodeCS value =
+  let nonAdaEntries = ptail # pto (pto (pfromData value))
+   in pelimList
+        (\currencyPair _ -> pfromData (pfstBuiltin # currencyPair) #== directoryNodeCS)
+        (pcon PFalse)
+        nonAdaEntries
+
+-- ============================================================================
+-- 7. Value aggregation
+-- ============================================================================
+-- Plinth: valueFromCred, valueToCred
+
+-- | Aggregate all non-Ada input value controlled by a payment credential.
 pvalueFromCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PPubKeyHash))
@@ -433,18 +514,7 @@ pvalueFromCred cred sigs withdrawalEntries inputs =
         # pemptyLedgerValue
         # inputs
 
-{- | Aggregate all non-Ada output value at a payment credential.
-
-High-level purpose:
-- Measure how much programmable value remains at the shared mini-ledger payment
-  credential after the transaction.
-
-Security invariants:
-- Only outputs whose payment credential equals `cred` may contribute.
-- Stake credentials, datums, and reference scripts are intentionally ignored here;
-  callers must validate those separately when required.
-- Ada must be stripped and non-Ada assets summed without loss or duplication.
--}
+-- | Aggregate all non-Ada output value at a payment credential.
 pvalueToCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PTxOut))
@@ -468,39 +538,11 @@ pvalueToCred cred inputs =
         # pemptyLedgerValue
         # inputs
 
-{- | Check that outputs whose payment credential equals `progLogicCred` contain at
-least the caller-supplied `expectedValue`.
+-- ============================================================================
+-- 8. Output containment check
+-- ============================================================================
+-- Plinth: outputsContainExpectedValueAtCred
 
-This is a lower-bound containment check, not an equality check:
-
-- Extra assets at mini-ledger outputs are allowed.
-- Stake credentials, datums and reference scripts are ignored.
-- Outputs are grouped by payment credential only, because mini-ledger ownership is
-  carried by the staking credential while the payment credential is the shared
-  programmable-logic-base script.
-
-The caller is responsible for supplying the correct `expectedValue`. In the
-`TransferAct` path this is the validated programmable input value, adjusted by the
-validated programmable mint/burn value. This helper does /not/ query the registry
-and does /not/ detect pre-existing programmable tokens already outside the
-mini-ledger; it only proves that the specific value passed in still remains at
-`progLogicCred` outputs.
-
-Implementation note: if `expectedValue` contains exactly one non-Ada asset, the
-function takes a single-asset fast path that scans outputs and accumulates only that
-asset quantity. Otherwise it aggregates the full non-Ada value at `progLogicCred`
-outputs and checks each expected asset against that aggregate.
-
-Security invariants:
-
-- The result must be a lower-bound containment check only for outputs at
-  `progLogicCred`.
-- No value at other payment credentials may satisfy the requirement.
-- This helper assumes the caller has already validated that `expectedValue`
-  represents the value that must remain inside the mini-ledger.
-- The single-asset fast path and the multi-asset path must be semantically
-  equivalent.
--}
 poutputsContainExpectedValueAtCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PTxOut))
@@ -508,40 +550,6 @@ poutputsContainExpectedValueAtCred
   -> Term s PBool
 poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
   let
-    passetQtyInValue = phoistAcyclic $ plam $ \value cs tn ->
-      let tokenQtyInTokenPairs = pfix #$ plam $ \self remainingTokenPairs ->
-            pelimList
-              ( \tokenPair tokenPairsRest ->
-                  let tokenName = pfromData (pfstBuiltin # tokenPair)
-                      tokenQty = pfromData (psndBuiltin # tokenPair)
-                   in pif
-                        (tokenName #== tn)
-                        tokenQty
-                        ( pif
-                            (tn #< tokenName)
-                            0
-                            (self # tokenPairsRest)
-                        )
-              )
-              0
-              remainingTokenPairs
-          tokenQtyInCurrencyPairs = pfix #$ plam $ \self remainingCurrencyPairs ->
-            pelimList
-              ( \currencyPair currencyPairsRest ->
-                  let currencySymbol = pfromData (pfstBuiltin # currencyPair)
-                      tokenPairs = pto (pfromData (psndBuiltin # currencyPair))
-                   in pif
-                        (currencySymbol #== cs)
-                        (tokenQtyInTokenPairs # tokenPairs)
-                        ( pif
-                            (cs #< currencySymbol)
-                            0
-                            (self # currencyPairsRest)
-                        )
-              )
-              0
-              remainingCurrencyPairs
-       in tokenQtyInCurrencyPairs # pto (pto value)
     hasAtLeastAssetInProgOutputs = pfix #$ plam $ \self requiredQty currentQty cs tn remainingOutputs ->
       pif
         (currentQty #>= requiredQty)
@@ -613,102 +621,11 @@ poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
       (pconstant True)
       expectedCsPairs
 
-{- | Base spending validator for programmable-token UTxOs.
+-- ============================================================================
+-- 9. Reference input lookup
+-- ============================================================================
+-- Plinth: findReferenceInputByCS, decodeDirectoryNode
 
-High-level purpose:
-- Force every spend of the shared programmable-token payment script to be
-  accompanied by the global stake validator through the withdraw-zero pattern.
-
-Security invariants:
-- Spending must fail unless the designated global stake credential appears in the
-  transaction withdrawals.
-- This validator must not independently authorize transfers or minting; it only
-  enforces delegation to the global validator.
-- The check must be credential-exact, so unrelated withdrawals cannot satisfy it.
--}
-mkProgrammableLogicBase :: Term s (PAsData PCredential :--> PScriptContext :--> PUnit)
-mkProgrammableLogicBase = plam $ \stakeCred ctx ->
-  pmatch (pscriptContextTxInfo ctx) $ \txInfo ->
-    let wdrls :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)))
-        wdrls = pto $ pfromData $ ptxInfo'wdrl txInfo
-     in plet wdrls $ \withdrawals ->
-          let firstWithdrawal :: Term _ (PAsData PCredential)
-              firstWithdrawal = pfstBuiltin # (phead @PBuiltinList # withdrawals)
-              hasCred =
-                (firstWithdrawal #== stakeCred)
-                  #|| let go = pfix #$ plam $ \self withdrawals' ->
-                            let withdrawal = phead # withdrawals'
-                             in (pfstBuiltin # withdrawal)
-                                  #== stakeCred
-                                  #|| plet
-                                    (ptail # withdrawals')
-                                    ( \withdrawals'' ->
-                                        let withdrawalA = phead # withdrawals''
-                                         in (pfstBuiltin # withdrawalA) #== stakeCred #|| self # (ptail # withdrawals'')
-                                    )
-                       in go # (ptail # withdrawals)
-           in pvalidateConditions [ptraceInfoIfFalse "programmable global not invoked" hasCred]
-
-{- | Check that the first non-Ada policy in a ledger value matches a state-token
-currency symbol.
-
-High-level purpose:
-- Provide the cheapest possible legitimacy check for directory/protocol reference
-  UTxOs whose state token is expected to be the first non-Ada entry.
-
-Security invariants:
-- This is /not/ a general membership scan; it intentionally treats “first non-Ada
-  policy is not the expected state token” as a failed legitimacy check.
-- In protocol paths that use this helper to validate a reference UTxO, a mismatch
-  means the transaction must be rejected.
-- A false result must never be interpreted as “policy absent everywhere”; it only
-  means the first non-Ada entry is not the expected currency symbol.
-- Values with no non-Ada entries are malformed for this use case and may cause
-  evaluation to fail.
--}
-phasCSH :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
-phasCSH directoryNodeCS value =
-  let value' = pto (pto (pfromData value))
-   in pfromData (pfstBuiltin # (phead # (ptail # value'))) #== directoryNodeCS
-
-{- | Safe variant of `phasCSH` that returns `False` instead of crashing on missing
-non-Ada entries.
-
-High-level purpose:
-- Probe candidate reference inputs before attempting datum decoding.
-
-Security invariants:
-- Like `phasCSH`, this only inspects the first non-Ada policy entry.
-- It must never be used as a general-purpose “contains currency symbol anywhere”
-  predicate.
-- Returning `False` is only appropriate while scanning candidates; protocol paths
-  that require the state token must keep searching or reject the transaction.
-- It must not mask malformed data at call sites where the identified reference
-  UTxO is mandatory for validation.
--}
-phasCSHOrFalse :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
-phasCSHOrFalse directoryNodeCS value =
-  let nonAdaEntries = ptail # pto (pto (pfromData value))
-   in pelimList
-        (\currencyPair _ -> pfromData (pfstBuiltin # currencyPair) #== directoryNodeCS)
-        (pcon PFalse)
-        nonAdaEntries
-
-{- | Locate the protocol-parameter reference input by its state-token currency
-symbol and decode its datum.
-
-High-level purpose:
-- Recover the global protocol configuration that every validator in this module is
-  parameterized by.
-
-Security invariants:
-- The chosen reference input must be identified by the expected state token.
-- The datum must be present and decode as `ProgrammableLogicGlobalParams`.
-- If no reference input carries the protocol state token, evaluation must fail and
-  the transaction must be rejected.
-- A candidate UTxO with the right state token but missing or malformed datum must
-  also cause rejection rather than falling back to any default.
--}
 pfindReferenceInputByCS
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
@@ -728,25 +645,11 @@ pfindReferenceInputByCS currencySymbol referenceInputs =
                 (self # (ptail # remainingRefInputs))
    in go # referenceInputs
 
-{- | Filter input value down to programmable policies by validating one directory
-node witness per policy entry.
+-- ============================================================================
+-- 10. Transfer logic validation
+-- ============================================================================
+-- Plinth: checkTransferLogicAndGetProgrammableValue
 
-High-level purpose:
-- Walk the non-Ada policies in the mini-ledger input value, prove which ones are
-  registered in the directory, and retain only those programmable entries.
-
-Security invariants:
-- `proofList` must be aligned with the currency-symbol order of `totalValue`.
-- A positive proof must reference the exact directory node and the associated
-  transfer logic script must be invoked, with adjacent identical scripts allowed to
-  reuse the cached witness check.
-- A negative proof must reference a covering node whose `(key, next)` interval
-  excludes the current currency symbol.
-- Every referenced directory node must itself be legitimate, proven by the
-  directory state token.
-- No non-programmable policy may be added to the returned value, and no validated
-  programmable policy may be dropped.
--}
 pcheckTransferLogicAndGetProgrammableValue
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
@@ -758,7 +661,6 @@ pcheckTransferLogicAndGetProgrammableValue
 pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries initialCachedTransferScript totalValue =
   let mapInnerList :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
       mapInnerList = pto (pto totalValue)
-      -- Cache transfer-script invocation checks across adjacent positive proofs.
       go = pfix #$ plam $ \self proofs inputInnerValue actualProgrammableTokenValue cachedTransferScript ->
         pelimList
           ( \csPair csPairs ->
@@ -819,23 +721,11 @@ pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList w
         # pto (pto pemptyLedgerValue)
         # initialCachedTransferScript
 
-{- | Filter the tx mint field down to programmable policies by validating one
-directory-node witness per minted policy.
+-- ============================================================================
+-- 11. Mint logic validation
+-- ============================================================================
+-- Plinth: checkMintLogicAndGetProgrammableValue
 
-High-level purpose:
-- Prove which minted or burned policies are programmable and return only those
-  signed entries for later output containment checks.
-
-Security invariants:
-- `proofList` must be aligned with the currency-symbol order of `totalMintValue`.
-- A positive proof must reference the exact directory node and the referenced
-  transfer logic script must be invoked.
-- A negative proof must reference a covering node whose `(key, next)` interval
-  excludes the minted currency symbol.
-- Every referenced directory node must be legitimate, proven by the directory
-  state token.
-- Missing or extra proofs must fail validation.
--}
 pcheckMintLogicAndGetProgrammableValue
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
@@ -896,6 +786,11 @@ pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withd
           remainingMintEntries
    in go # proofList # mintedEntries # pnil
 
+-- ============================================================================
+-- 12. Redeemer types and offchain helpers
+-- ============================================================================
+-- Plinth: imports ProgrammableLogicGlobalRedeemer from this module
+
 data ProgrammableLogicGlobalRedeemer
   = TransferAct
       { plgrTransferProofs :: [Integer]
@@ -913,18 +808,6 @@ PlutusTx.makeIsDataIndexed
   ''ProgrammableLogicGlobalRedeemer
   [('TransferAct, 0), ('SeizeAct, 1)]
 
-{- | Convert absolute tx-input indexes into the relative-index encoding used by
-`SeizeAct`.
-
-High-level purpose:
-- Compress seize witnesses so onchain validation can walk the input list in one
-  pass without restarting from the head each time.
-
-Security invariants:
-- Input indexes must be strictly increasing and non-negative.
-- The resulting relative list must identify exactly the same absolute inputs.
-- Any malformed witness sequence must be rejected at construction time.
--}
 absoluteToRelativeInputIdxs :: [Integer] -> [Integer]
 absoluteToRelativeInputIdxs [] = []
 absoluteToRelativeInputIdxs (firstAbsIdx : remainingAbsIdxs)
@@ -937,16 +820,6 @@ absoluteToRelativeInputIdxs (firstAbsIdx : remainingAbsIdxs)
     | currentAbsIdx <= previousAbsIdx = error "absoluteToRelativeInputIdxs: absolute indexes must be strictly increasing"
     | otherwise = (currentAbsIdx - previousAbsIdx - 1) : go currentAbsIdx restAbsIdxs
 
-{- | Construct a `SeizeAct` redeemer from already-relative input indexes.
-
-High-level purpose:
-- Package the third-party transfer witness in the canonical onchain format.
-
-Security invariants:
-- All relative indexes must be non-negative.
-- `plgrLengthInputIdxs` must equal the true list length.
-- The constructor must not reorder or rewrite the supplied witness list.
--}
 mkSeizeActRedeemerFromRelativeInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
 mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outputsStartIdx
   | any (< 0) relativeInputIdxs = error "mkSeizeActRedeemerFromRelativeInputIdxs: negative relative index"
@@ -958,18 +831,6 @@ mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outpu
         , plgrLengthInputIdxs = fromIntegral (length relativeInputIdxs)
         }
 
-{- | Construct a `SeizeAct` redeemer from absolute input indexes.
-
-High-level purpose:
-- Provide the safer offchain API for seize witnesses by deriving the canonical
-  relative encoding automatically.
-
-Security invariants:
-- The absolute index list must satisfy the invariants of
-  `absoluteToRelativeInputIdxs`.
-- The resulting redeemer must address the same inputs as the original absolute
-  list.
--}
 mkSeizeActRedeemerFromAbsoluteInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
 mkSeizeActRedeemerFromAbsoluteInputIdxs directoryNodeIdx absoluteInputIdxs =
   mkSeizeActRedeemerFromRelativeInputIdxs
@@ -978,15 +839,10 @@ mkSeizeActRedeemerFromAbsoluteInputIdxs directoryNodeIdx absoluteInputIdxs =
 
 data PProgrammableLogicGlobalRedeemer (s :: S)
   = PTransferAct
-      -- The witness lists contain reference-input indices for directory nodes.
-      -- Exact-match vs covering-node proofs are derived onchain from the referenced datum.
       { ptransferProofs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
       , pmintProofs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
       }
-  | -- The proofs validate currency-symbol membership against the directory:
-    -- ptransferProofs correspond to programmable input value entries.
-    -- pmintProofs correspond to tx mint currency-symbol entries.
-    PSeizeAct
+  | PSeizeAct
       { pdirectoryNodeIdx :: Term s (PAsData PInteger)
       , pinputIdxs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
       , poutputsStartIdx :: Term s (PAsData PInteger)
@@ -1001,212 +857,64 @@ deriving via
   instance
     PLiftable PProgrammableLogicGlobalRedeemer
 
-{- | Global stake validator for programmable-token transfers and third-party
-seizures.
+-- ============================================================================
+-- 13. SeizeAct: value delta
+-- ============================================================================
+-- Plinth: valueEqualsDeltaCurrencySymbol, dataEqual
 
-High-level purpose:
-- Enforce the mini-ledger security model for both ordinary `TransferAct`
-  transactions and privileged `SeizeAct` transactions.
+-- | Compare two values; require equality everywhere except one CS; return that CS's signed delta.
+pvalueEqualsDeltaCurrencySymbol
+  :: forall anyOrder anyAmount s
+   . Term s PCurrencySymbol
+  -> Term s (PAsData (PValue anyOrder anyAmount))
+  -> Term s (PAsData (PValue anyOrder anyAmount))
+  -> Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+pvalueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
+  let innerInputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
+      innerInputValue = pto (pto $ pfromData inputUTxOValue)
+      innerOutputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
+      innerOutputValue = pto (pto $ pfromData outputUTxOValue)
 
-Security invariants:
-- The protocol-parameter reference input must be found and decoded correctly.
--}
-mkProgrammableLogicGlobal :: Term s (PAsData PCurrencySymbol :--> PScriptContext :--> PUnit)
-mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
-  PScriptContext{pscriptContext'txInfo, pscriptContext'redeemer, pscriptContext'scriptInfo} <- pmatch ctx
-  PTxInfo{ptxInfo'inputs, ptxInfo'referenceInputs, ptxInfo'outputs, ptxInfo'signatories, ptxInfo'wdrl, ptxInfo'mint, ptxInfo'redeemers} <- pmatch pscriptContext'txInfo
-  let red = pfromData $ punsafeCoerce @(PAsData PProgrammableLogicGlobalRedeemer) (pto pscriptContext'redeemer)
-  referenceInputs <- plet $ pfromData ptxInfo'referenceInputs
+      goOuter
+        :: Term
+             _
+             ( PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
+                 :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
+                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+             )
+      goOuter = pfix #$ plam $ \self inputValuePairs outputValuePairs diffAccumulator ->
+        pelimList
+          ( \inputValueEntry inputValueEntries ->
+              plet (pfstBuiltin # inputValueEntry) $ \inputValueEntryCS ->
+                pelimList
+                  ( \outputValueEntry outputValueEntries ->
+                      pif
+                        (pfromData inputValueEntryCS #== pfromData (pfstBuiltin # outputValueEntry))
+                        ( pif
+                            (pfromData inputValueEntryCS #== progCS)
+                            ( pif
+                                (pmapData # punsafeCoerce outputValueEntries #== pmapData # punsafeCoerce inputValueEntries)
+                                (psubtractTokens # pto (pfromData (psndBuiltin # inputValueEntry)) # pto (pfromData @(PMap anyOrder PTokenName PInteger) (psndBuiltin # outputValueEntry)))
+                                perror
+                            )
+                            (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) (self # inputValueEntries # outputValueEntries # diffAccumulator) perror)
+                        )
+                        (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) diffAccumulator perror)
+                  )
+                  pnil
+                  outputValuePairs
+          )
+          pnil
+          inputValuePairs
+   in goOuter # innerInputValue # innerOutputValue # pnil
 
-  -- Extract protocol parameter UTxO
-  ptraceInfo "Extracting protocol parameter UTxO"
+-- ============================================================================
+-- 14. SeizeAct: processThirdPartyTransfer
+-- ============================================================================
+-- Plinth: processThirdPartyTransfer (with checkCorrespondingPair, accumulateProgOutputTokens)
 
-  PProgrammableLogicGlobalParams{pdirectoryNodeCS, pprogLogicCred} <-
-    pmatch $
-      pfindReferenceInputByCS (pfromData protocolParamsCS) referenceInputs
-  progLogicCred <- plet $ pfromData pprogLogicCred
-
-  ptraceInfo "Extracting invoked scripts"
-  withdrawalEntries <- plet $ pto (pfromData ptxInfo'wdrl)
-
-  pmatch red $ \case
-    -- `TransferAct` invariants:
-    -- - The expected programmable output value must equal the validated
-    --   programmable inputs plus validated programmable mint or burn.
-    -- - No programmable value may escape from outputs at `progLogicCred`.
-    -- - Transfer and mint proofs must be consumed in lockstep with the
-    --   programmable policies they witness.
-    PTransferAct transferProofs mintProofs -> P.do
-      cachedTransferScript0 <- plet $ pfstBuiltin # (phead @PBuiltinList # withdrawalEntries)
-      totalProgTokenValue <-
-        plet $
-          pvalueFromCred
-            progLogicCred
-            (pfromData ptxInfo'signatories)
-            withdrawalEntries
-            (pfromData ptxInfo'inputs)
-      totalProgTokenValue_ <-
-        plet $
-          pcheckTransferLogicAndGetProgrammableValue
-            (pfromData pdirectoryNodeCS)
-            referenceInputs
-            (pfromData transferProofs)
-            withdrawalEntries
-            cachedTransferScript0
-            totalProgTokenValue
-      mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
-      expectedProgrammableOutputValue <-
-        plet $
-          pif
-            (pnull # pto (pto mintValueNoGuarantees))
-            totalProgTokenValue_
-            ( punsafeCoerce @(PValue 'Sorted 'Positive) $
-                punsafeCoerce @(PValue 'Sorted 'NoGuarantees) totalProgTokenValue_
-                  #<> pcheckMintLogicAndGetProgrammableValue
-                    (pfromData pdirectoryNodeCS)
-                    referenceInputs
-                    (pfromData mintProofs)
-                    withdrawalEntries
-                    mintValueNoGuarantees
-            )
-
-      pvalidateConditions
-        [ pisRewardingScript (pdata pscriptContext'scriptInfo)
-        , ptraceInfoIfFalse "prog tokens escape" $
-            poutputsContainExpectedValueAtCred
-              progLogicCred
-              (pfromData ptxInfo'outputs)
-              expectedProgrammableOutputValue
-        ]
-    -- `SeizeAct` invariants:
-    -- - Only the seized policy may change across paired programmable
-    --   inputs and outputs.
-    -- - The resulting seized-policy delta plus mint or burn for that
-    --   policy must remain inside the programmable outputs.
-    -- - Input witnesses must cover all script spends and match the
-    --   redeemer's declared witness count.
-    PSeizeAct{pdirectoryNodeIdx, pinputIdxs, poutputsStartIdx, plengthInputIdxs} -> P.do
-      inputIdxsLen <- plet $ pfromData plengthInputIdxs
-      let inputIdxsData = punsafeCoerce (pfromData pinputIdxs) :: Term _ (PBuiltinList PData)
-      let remainingOutputs = pdropFast # pfromData poutputsStartIdx # pfromData ptxInfo'outputs
-      let directoryNodeUTxO = phead # (pdropFast # pfromData pdirectoryNodeIdx # referenceInputs)
-      PTxOut{ptxOut'value = seizeDirectoryNodeValue, ptxOut'datum = seizeDirectoryNodeDatum} <- pmatch (ptxInInfoResolved $ pfromData directoryNodeUTxO)
-      POutputDatum seizeDat' <- pmatch seizeDirectoryNodeDatum
-      PDirectorySetNode
-        { pkey = directoryNodeDatumFKey
-        , pissuerLogicScript = directoryNodeDatumFIssuerLogicScript
-        } <-
-        pmatch (pfromData $ punsafeCoerce @(PAsData PDirectorySetNode) (pto seizeDat'))
-      mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
-      seizeMintedTokens <- plet $ ptokensForCurrencySymbol # pfromData directoryNodeDatumFKey # mintValueNoGuarantees
-      let conditions =
-            [ ptraceInfoIfFalse "mini-ledger invariants violated" $ processThirdPartyTransfer directoryNodeDatumFKey progLogicCred (pfromData ptxInfo'inputs) remainingOutputs inputIdxsData seizeMintedTokens
-            , ptraceInfoIfFalse "issuer logic script must be invoked" $ pisScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
-            , -- directory node is valid (presence of state token)
-              ptraceInfoIfFalse "directory node is not valid" $ phasCSH (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
-            , -- input indexes must cover all script spends in the transaction.
-              ptraceInfoIfFalse "spending redeemer count mismatch" $ penforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
-            , -- list payload must match declared list length in the redeemer.
-              ptraceInfoIfFalse "input index length mismatch" $ (pbuiltinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
-            ]
-      pvalidateConditions conditions
-
-{- | Extract the token-name map for one currency symbol from a sorted value.
-
-High-level purpose:
-- Avoid full-value reconstruction when only one policy entry is relevant to the
-  current check.
-
-Security invariants:
-- The input value must be sorted by currency symbol.
-- The returned token pairs must preserve the original sorted token-name order.
-- If the policy is absent, the result must be exactly empty rather than a
-  fabricated zero entry.
--}
-ptokensForCurrencySymbol
-  :: forall anyAmount s
-   . Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-ptokensForCurrencySymbol =
-  phoistAcyclic $
-    plam $ \targetCs mintValue ->
-      let mintedEntries :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
-          mintedEntries = pto (pto mintValue)
-          go = pfix #$ plam $ \self remainingMintEntries ->
-            pelimList
-              ( \mintCsPair mintCsPairs ->
-                  let mintCs = pfromData (pfstBuiltin # mintCsPair)
-                   in pif
-                        (mintCs #== targetCs)
-                        (pto (pfromData (psndBuiltin # mintCsPair)))
-                        (pif (targetCs #< mintCs) pnil (self # mintCsPairs))
-              )
-              pnil
-              remainingMintEntries
-       in go # mintedEntries
-
-{- | Check whether `actualTokens` contains at least the signed quantities required
-by `requiredTokens`.
-
-High-level purpose:
-- Provide a policy-local containment check for seize-path balance invariants.
-
-Security invariants:
-- Both inputs must be sorted by token name.
-- Positive required quantities must only pass when enough quantity is present in
-  `actualTokens`.
-- Negative required quantities must be treated as already satisfied by zero, since
-  they represent value removed from the required remainder.
-- The helper must not introduce false positives by skipping unmatched positive
-  requirements.
--}
-ptokenPairsContain
-  :: Term
-       s
-       ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-           :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-           :--> PBool
-       )
-ptokenPairsContain = phoistAcyclic $
-  pfix #$ plam $ \self actualTokens requiredTokens ->
-    pelimList
-      ( \requiredPair requiredRest ->
-          let requiredTokenName = pfromData (pfstBuiltin # requiredPair)
-              requiredQty = pfromData (psndBuiltin # requiredPair)
-           in pelimList
-                ( \actualPair actualRest ->
-                    let actualTokenName = pfromData (pfstBuiltin # actualPair)
-                        actualQty = pfromData (psndBuiltin # actualPair)
-                     in pif
-                          (actualTokenName #== requiredTokenName)
-                          (pif (actualQty #>= requiredQty) (self # actualRest # requiredRest) (pconstant False))
-                          ( pif
-                              (actualTokenName #< requiredTokenName)
-                              (self # actualRest # requiredTokens)
-                              (pif (0 #>= requiredQty) (self # actualTokens # requiredRest) (pconstant False))
-                          )
-                )
-                (pif (0 #>= requiredQty) (self # pnil # requiredRest) (pconstant False))
-                actualTokens
-      )
-      (pconstant True)
-      requiredTokens
-
-{- | Validate one corresponding programmable input/output pair in the seize path
-and accumulate the delta for the seized policy.
-
-High-level purpose:
-- Prove that a witness-selected programmable input keeps the same address, datum,
-  and reference script in its paired output, with only the seized policy allowed
-  to change.
-
-Security invariants:
-- Only inputs at `progLogicCred` may be treated as programmable inputs.
-- The paired output must preserve address, datum, and reference script exactly.
-- All non-target policies must remain unchanged, enforced by
-  `pvalueEqualsDeltaCurrencySymbol`.
-- Witness indexes that point to pubkey inputs must fail.
-- The accumulated delta must contain only the seized policy.
--}
+-- | Validate one corresponding input/output pair and accumulate the delta for the seized policy.
 pcheckCorrespondingThirdPartyTransferInputsAndOutputs
   :: Term s PCurrencySymbol
   -> Term s PCredential
@@ -1253,21 +961,7 @@ pcheckCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCr
                               (ptraceInfoError "input index points to pubkey input")
                           )
 
-{- | Validate the full `SeizeAct` mini-ledger transformation.
-
-High-level purpose:
-- Consume the witness-selected programmable inputs and continuing outputs, compute
-  the net seized-policy delta, include mint/burn for that same policy, and prove
-  that the remainder still lives at programmable outputs.
-
-Security invariants:
-- The witness list must be interpreted as relative indexes over the remaining
-  input suffix.
-- Only the seized policy may vary across corresponding input/output pairs.
-- The final delta plus minted tokens for the seized policy must be contained in
-  the remaining programmable outputs.
-- Outputs at other payment credentials must never satisfy the balance invariant.
--}
+-- | Validate the full SeizeAct mini-ledger transformation.
 processThirdPartyTransfer
   :: Term s (PAsData PCurrencySymbol)
   -> Term s PCredential
@@ -1281,14 +975,14 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
     programmableCS' = pfromData programmableCS
     checkBalanceInvariant :: Term _ (PBuiltinList (PAsData PTxOut)) -> Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))) -> Term _ PBool
     checkBalanceInvariant remainingOutputs deltaAccumulatorResult =
-      let outputAccumulatorResult = go2 # remainingOutputs
+      let outputAccumulatorResult = accumulateProgOutputTokens # remainingOutputs
        in pif
             (ptokenPairsContain # outputAccumulatorResult # deltaAccumulatorResult)
             (pconstant True)
             perror
 
-    go2 :: Term _ (PBuiltinList (PAsData PTxOut) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-    go2 = pfix #$ plam $ \self programmableOutputs ->
+    accumulateProgOutputTokens :: Term _ (PBuiltinList (PAsData PTxOut) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+    accumulateProgOutputTokens = pfix #$ plam $ \self programmableOutputs ->
       pelimList
         ( \programmableOutput programmableOutputsRest ->
             pmatch (pfromData programmableOutput) $ \(PTxOut{ptxOut'address = programmableOutputAddress, ptxOut'value = programmableOutputValue}) ->
@@ -1324,218 +1018,137 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
    in
     go # inputIdxs' # inputs # progOutputs # pnil
 
--------------------------------------------------------------------------------
--- Corresponding inputs and outputs from and to the programmable token spending script (mini-ledger where all programmable tokens live).
--- Example Inputs:
--- inputA = {
---   progCS: { Foo: 120, Bar: 80 },
---   ADA: { "": 3_000_000 },
---   usdCS: { USDT: 50 },
---   nftCS: { ArtNFT: 1 }
--- }
+-- ============================================================================
+-- 15. Redeemer map helpers
+-- ============================================================================
+-- Plinth: enforceNSpendRedeemers, isSpendingPurpose
 
--- inputB = {
---   progCS: { Foo: 70 },
---   ADA: { "": 2_000_000 },
---   usdCS: { USDT: 10 }
--- }
+penforceNSpendRedeemers :: Term s PInteger -> Term s (PMap 'Unsorted PScriptPurpose PRedeemer) -> Term s PBool
+penforceNSpendRedeemers n rdmrs =
+  let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
+      isNonSpend red = pnot # (pfstBuiltin # (pasConstr # pforgetData red) #== 1)
+      isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
+      isLastSpend = plam $ \redeemers ->
+        let constrPair = pfstBuiltin # (phead # redeemers)
+            constrIdx = pfstBuiltin # (pasConstr # pforgetData constrPair)
+         in pif
+              (constrIdx #== 1)
+              (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
+              perror
+   in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
 
--- inputC = {
---   progCS: { Foo: 40, Bar: 30 },
---   ADA: { "": 1_500_000 }
--- }
+-- ============================================================================
+-- 16. Base validator (mkProgrammableLogicBase)
+-- ============================================================================
+-- Plinth: mkProgrammableLogicBaseValidator
 
--------------------------------------------------------------------------------
--- Corresponding Outputs:
--- Corresponding outputs are the continuing outputs for their corresponding inputs. They must have the same address as their input (as indicated by their label as continuing outputs)
--- they must also have the same datum and the same reference script hash (if present) as their input.
--- Finally, they must also have the same value as their input except for the balance of tokens with the progCS currency symbol, for tokens of that currency symbol.
+mkProgrammableLogicBase :: Term s (PAsData PCredential :--> PScriptContext :--> PUnit)
+mkProgrammableLogicBase = plam $ \stakeCred ctx ->
+  pmatch (pscriptContextTxInfo ctx) $ \txInfo ->
+    let wdrls :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)))
+        wdrls = pto $ pfromData $ ptxInfo'wdrl txInfo
+     in plet wdrls $ \withdrawals ->
+          let firstWithdrawal :: Term _ (PAsData PCredential)
+              firstWithdrawal = pfstBuiltin # (phead @PBuiltinList # withdrawals)
+              hasCred =
+                (firstWithdrawal #== stakeCred)
+                  #|| let go = pfix #$ plam $ \self withdrawals' ->
+                            let withdrawal = phead # withdrawals'
+                             in (pfstBuiltin # withdrawal)
+                                  #== stakeCred
+                                  #|| plet
+                                    (ptail # withdrawals')
+                                    ( \withdrawals'' ->
+                                        let withdrawalA = phead # withdrawals''
+                                         in (pfstBuiltin # withdrawalA) #== stakeCred #|| self # (ptail # withdrawals'')
+                                    )
+                       in go # (ptail # withdrawals)
+           in pvalidateConditions [ptraceInfoIfFalse "programmable global not invoked" hasCred]
 
--- Example outputs:
--- correspondingOutputA = {
---   progCS: { Foo: 140, Bar: 60 },
---   ADA: { "": 3_000_000 },
---   usdCS: { USDT: 50 },
---   nftCS: { ArtNFT: 1 }
--- }
+-- ============================================================================
+-- 17. Global validator (mkProgrammableLogicGlobal)
+-- ============================================================================
+-- Plinth: mkProgrammableLogicGlobalValidator
 
--- correspondingOutputB = {
---   progCS: { Foo: 20 },
---   ADA: { "": 2_000_000 },
---   usdCS: { USDT: 10 }
--- }
+mkProgrammableLogicGlobal :: Term s (PAsData PCurrencySymbol :--> PScriptContext :--> PUnit)
+mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
+  PScriptContext{pscriptContext'txInfo, pscriptContext'redeemer, pscriptContext'scriptInfo} <- pmatch ctx
+  PTxInfo{ptxInfo'inputs, ptxInfo'referenceInputs, ptxInfo'outputs, ptxInfo'signatories, ptxInfo'wdrl, ptxInfo'mint, ptxInfo'redeemers} <- pmatch pscriptContext'txInfo
+  let red = pfromData $ punsafeCoerce @(PAsData PProgrammableLogicGlobalRedeemer) (pto pscriptContext'redeemer)
+  referenceInputs <- plet $ pfromData ptxInfo'referenceInputs
 
--- correspondingOutputC = {
---   progCS: { Foo: 10, Bar: 10 },
---   ADA: { "": 1_500_000 }
--- }
+  ptraceInfo "Extracting protocol parameter UTxO"
 
--------------------------------------------------------------------------------
--- Remaining outputs:
--- Remaining programmable token outputs - these are outputs to the programmable token spending script (mini-ledger where all programmable tokens live)
--- that are not corresponding to any inputs to the programmable token spending script. The accumulated value of these outputs must contain
--- the delta between the amount of programmable asset in the inputs and the amount of programmable asset in the corresponding outputs thus assuring all
--- programmable assets must stay within the programmable token spending script.
--- Example remaining outputs:
--- remainingOutputA = {
---   progCS: { Foo: 40, Bar: 25 },
---   ADA: { "": 2_000_000 }
--- }
+  PProgrammableLogicGlobalParams{pdirectoryNodeCS, pprogLogicCred} <-
+    pmatch $
+      pfindReferenceInputByCS (pfromData protocolParamsCS) referenceInputs
+  progLogicCred <- plet $ pfromData pprogLogicCred
 
--- remainingOutputB = {
---   progCS: { Foo: 20, Bar: 15 },
---   ADA: { "": 2_000_000 }
--- }
+  ptraceInfo "Extracting invoked scripts"
+  withdrawalEntries <- plet $ pto (pfromData ptxInfo'wdrl)
 
--------------------------------------------------------------------------------
--- The below calculation checks that the total amount of programmable tokens spent from the script is equal to the amount sent to the script,
--- and that each correspondingOutput is equal to it's input except for the balance of tokens with the progCS currency symbol, for tokens of that currency symbol
--- each corresponding output contains either more or less than the amount of the tokens in the input.
-
--- accumulatedValue = amount of programmable asset in input - amount of programmable asset in corresponding output
-
--- outputValueAccumulator = emptyValue
--- if accumulatedValue > 0
---   for each remainingOutput:
---     outputValueAccumulator = outputValueAccumulator <> remainingOutputValue
-
--- if (valueContains outputValueAccumulator accumulatedValue)
---    constant True
-
-{- | Negate every signed quantity in a sorted token-name map.
-
-High-level purpose:
-- Reuse the same token-pair representation for both positive and negative deltas.
-
-Security invariants:
-- Token names and ordering must be preserved exactly.
-- Each quantity must be negated exactly once.
--}
-pnegateTokens :: Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-pnegateTokens = pfix #$ plam $ \self tokens ->
-  pelimList
-    ( \tokenPair tokensRest ->
-        let tokenName = pfstBuiltin # tokenPair
-            tokenAmount = psndBuiltin # tokenPair
-         in pcons # (ppairDataBuiltin # tokenName # pdata (pconstantInteger 0 - pfromData tokenAmount)) # (self # tokensRest)
-    )
-    pnil
-    tokens
-
-{- | Compare two values, require equality everywhere except one policy, and return
-that policy's signed delta.
-
-High-level purpose:
-- Encode the core seize-path invariant that only one currency symbol may change
-  across a corresponding input/output pair.
-
-Security invariants:
-- Any difference outside `progCS` must fail validation.
-- The returned token list must contain only entries for `progCS`.
-- Each returned quantity must equal `inputQty - outputQty`, including negative
-  results when the output gained more than the input held.
-- Zero deltas must be omitted so downstream unions and containment checks operate
-  on canonical sparse maps.
--}
-pvalueEqualsDeltaCurrencySymbol
-  :: forall anyOrder anyAmount s
-   . Term s PCurrencySymbol
-  -> Term s (PAsData (PValue anyOrder anyAmount))
-  -> Term s (PAsData (PValue anyOrder anyAmount))
-  -> Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-pvalueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
-  let innerInputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
-      innerInputValue = pto (pto $ pfromData inputUTxOValue)
-      innerOutputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
-      innerOutputValue = pto (pto $ pfromData outputUTxOValue)
-
-      psubtractTokens
-        :: Term
-             _
-             ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-             )
-      psubtractTokens =
-        pfix #$ plam $ \self inputTokens outputTokens ->
-          pelimList
-            ( \inputPair inputRest ->
-                plet (pfstBuiltin # inputPair) $ \inputTokenName ->
-                  let inputTokenAmount = psndBuiltin # inputPair
-                   in pelimList
-                        ( \outputPair outputRest ->
-                            let outputTokenName = pfstBuiltin # outputPair
-                                outputTokenAmount = psndBuiltin # outputPair
-                             in pif
-                                  (pfromData inputTokenName #<= pfromData outputTokenName)
-                                  ( -- inputTokenName <= outputTokenName
-                                    pif
-                                      (inputTokenName #== outputTokenName)
-                                      ( -- names equal → diff = input − output; skip if zero
-                                        let diff = pfromData inputTokenAmount - pfromData outputTokenAmount
-                                         in pif
-                                              (diff #== 0)
-                                              (self # inputRest # outputRest)
-                                              ( pcons
-                                                  # (ppairDataBuiltin # inputTokenName # pdata diff)
-                                                  # (self # inputRest # outputRest)
-                                              )
-                                      )
-                                      ( -- outputTokenName > inputTokenName → token only in input (nonzero by invariant)
-                                        let diff = pfromData inputTokenAmount
-                                         in pcons
-                                              # (ppairDataBuiltin # inputTokenName # pdata diff)
-                                              # (self # inputRest # outputTokens)
-                                      )
-                                  )
-                                  ( -- outputTokenName < inputTokenName → token only in output (nonzero by invariant)
-                                    let diff = pconstantInteger 0 - pfromData outputTokenAmount
-                                     in pcons
-                                          # (ppairDataBuiltin # outputTokenName # pdata diff)
-                                          # (self # inputTokens # outputRest)
-                                  )
-                        )
-                        -- output exhausted → emit remaining input tokens as positive (nonzero by invariant)
-                        inputRest
-                        outputTokens
+  pmatch red $ \case
+    PTransferAct transferProofs mintProofs -> P.do
+      cachedTransferScript0 <- plet $ pfstBuiltin # (phead @PBuiltinList # withdrawalEntries)
+      totalProgTokenValue <-
+        plet $
+          pvalueFromCred
+            progLogicCred
+            (pfromData ptxInfo'signatories)
+            withdrawalEntries
+            (pfromData ptxInfo'inputs)
+      totalProgTokenValue_ <-
+        plet $
+          pcheckTransferLogicAndGetProgrammableValue
+            (pfromData pdirectoryNodeCS)
+            referenceInputs
+            (pfromData transferProofs)
+            withdrawalEntries
+            cachedTransferScript0
+            totalProgTokenValue
+      mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
+      expectedProgrammableOutputValue <-
+        plet $
+          pif
+            (pnull # pto (pto mintValueNoGuarantees))
+            totalProgTokenValue_
+            ( punsafeCoerce @(PValue 'Sorted 'Positive) $
+                punsafeCoerce @(PValue 'Sorted 'NoGuarantees) totalProgTokenValue_
+                  #<> pcheckMintLogicAndGetProgrammableValue
+                    (pfromData pdirectoryNodeCS)
+                    referenceInputs
+                    (pfromData mintProofs)
+                    withdrawalEntries
+                    mintValueNoGuarantees
             )
-            -- input exhausted → emit remaining output tokens as negative (nonzero by invariant)
-            (pnegateTokens # outputTokens)
-            inputTokens
 
-      -- no need to check for progCs in "everything should be same" parts
-      -- input  : |- everything should be same -| |-progCs-| |-everything should be same-|
-      -- output : |- everything should be same -| |-progCs-| |-everything should be same-|
-      goOuter
-        :: Term
-             _
-             ( PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
-                 :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
-                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) -- accumulator (delta for progCS)
-                 :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-             )
-      goOuter = pfix #$ plam $ \self inputValuePairs outputValuePairs diffAccumulator ->
-        pelimList
-          ( \inputValueEntry inputValueEntries ->
-              plet (pfstBuiltin # inputValueEntry) $ \inputValueEntryCS ->
-                pelimList
-                  ( \outputValueEntry outputValueEntries ->
-                      pif
-                        (pfromData inputValueEntryCS #== pfromData (pfstBuiltin # outputValueEntry))
-                        ( pif
-                            (pfromData inputValueEntryCS #== progCS)
-                            ( pif
-                                (pmapData # punsafeCoerce outputValueEntries #== pmapData # punsafeCoerce inputValueEntries)
-                                (psubtractTokens # pto (pfromData (psndBuiltin # inputValueEntry)) # pto (pfromData @(PMap anyOrder PTokenName PInteger) (psndBuiltin # outputValueEntry)))
-                                perror
-                            )
-                            (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) (self # inputValueEntries # outputValueEntries # diffAccumulator) perror)
-                        )
-                        (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) diffAccumulator perror)
-                  )
-                  pnil
-                  outputValuePairs
-          )
-          pnil
-          inputValuePairs
-   in goOuter # innerInputValue # innerOutputValue # pnil
+      pvalidateConditions
+        [ pisRewardingScript (pdata pscriptContext'scriptInfo)
+        , ptraceInfoIfFalse "prog tokens escape" $
+            poutputsContainExpectedValueAtCred
+              progLogicCred
+              (pfromData ptxInfo'outputs)
+              expectedProgrammableOutputValue
+        ]
+    PSeizeAct{pdirectoryNodeIdx, pinputIdxs, poutputsStartIdx, plengthInputIdxs} -> P.do
+      inputIdxsLen <- plet $ pfromData plengthInputIdxs
+      let inputIdxsData = punsafeCoerce (pfromData pinputIdxs) :: Term _ (PBuiltinList PData)
+      let remainingOutputs = pdropFast # pfromData poutputsStartIdx # pfromData ptxInfo'outputs
+      let directoryNodeUTxO = phead # (pdropFast # pfromData pdirectoryNodeIdx # referenceInputs)
+      PTxOut{ptxOut'value = seizeDirectoryNodeValue, ptxOut'datum = seizeDirectoryNodeDatum} <- pmatch (ptxInInfoResolved $ pfromData directoryNodeUTxO)
+      POutputDatum seizeDat' <- pmatch seizeDirectoryNodeDatum
+      PDirectorySetNode
+        { pkey = directoryNodeDatumFKey
+        , pissuerLogicScript = directoryNodeDatumFIssuerLogicScript
+        } <-
+        pmatch (pfromData $ punsafeCoerce @(PAsData PDirectorySetNode) (pto seizeDat'))
+      mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
+      seizeMintedTokens <- plet $ ptokensForCurrencySymbol # pfromData directoryNodeDatumFKey # mintValueNoGuarantees
+      let conditions =
+            [ ptraceInfoIfFalse "mini-ledger invariants violated" $ processThirdPartyTransfer directoryNodeDatumFKey progLogicCred (pfromData ptxInfo'inputs) remainingOutputs inputIdxsData seizeMintedTokens
+            , ptraceInfoIfFalse "issuer logic script must be invoked" $ pisScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
+            , ptraceInfoIfFalse "directory node is not valid" $ phasCSH (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
+            , ptraceInfoIfFalse "spending redeemer count mismatch" $ penforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
+            , ptraceInfoIfFalse "input index length mismatch" $ (pbuiltinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
+            ]
+      pvalidateConditions conditions

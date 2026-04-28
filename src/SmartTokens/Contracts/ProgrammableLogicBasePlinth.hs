@@ -28,17 +28,25 @@ import SmartTokens.Types.PTokenDirectory (DirectorySetNode (..))
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (..))
 
 -- ============================================================================
--- Compiled script helper: convert PlutusTx CompiledCode to Plutarch Script
+-- 1. Plinth infrastructure
 -- ============================================================================
+-- Plutarch: type PType, type ClosedTerm, pmapData, ppairDataBuiltinRaw,
+--           pjustData, pand'List, pvalidateConditions
 
 compiledCodeToScript :: PlutusTx.CompiledCode a -> Script
 compiledCodeToScript code =
   let UPLC.Program ann ver body = getPlcNoAnn code
    in Script (UPLC.Program ann ver (UPLC.termMapNames UPLC.unNameDeBruijn body))
 
+{-# INLINEABLE dataEqual #-}
+dataEqual :: (PlutusTx.ToData a) => a -> a -> Bool
+dataEqual a b = PlutusTx.toBuiltinData a == PlutusTx.toBuiltinData b
+
 -- ============================================================================
--- Utility: list operations
+-- 2. List operations
 -- ============================================================================
+-- Plutarch: pnTails, ptails10/20/30, pdropR, pdropFast,
+--           pbuiltinListLength, pbuiltinListLengthFast
 
 {-# INLINEABLE dropList #-}
 dropList :: Integer -> [a] -> [a]
@@ -75,8 +83,12 @@ indexList (x : xs) n
   | otherwise = indexList xs (n - 1)
 
 -- ============================================================================
--- Value helpers: sorted-map operations on the raw structure
+-- 3. Value helpers
 -- ============================================================================
+-- Plutarch: emptyValue, pemptyLedgerValue, pstripAdaH,
+--           ptokenPairsUnionFast, pcurrencyPairsUnionFast, pvalueUnionFast,
+--           passetQtyInValue, ptokensForCurrencySymbol,
+--           pnegateTokens, psubtractTokens, ptokenPairsContain
 
 {-# INLINEABLE valueToSortedList #-}
 valueToSortedList :: Value -> [(CurrencySymbol, [(TokenName, Integer)])]
@@ -162,7 +174,7 @@ negateTokens :: [(TokenName, Integer)] -> [(TokenName, Integer)]
 negateTokens [] = []
 negateTokens ((tn, qty) : rest) = (tn, negate qty) : negateTokens rest
 
--- | Subtract token pairs: inputTokens - outputTokens, skipping zero results.
+-- | Subtract token pairs: input - output, skipping zero results.
 {-# INLINEABLE subtractTokens #-}
 subtractTokens :: [(TokenName, Integer)] -> [(TokenName, Integer)] -> [(TokenName, Integer)]
 subtractTokens [] outs = negateTokens outs
@@ -189,12 +201,13 @@ tokenPairsContain [] ((_, reqQty) : reqRest) =
 tokenPairsContain actAll@((actTn, actQty) : actRest) reqAll@((reqTn, reqQty) : reqRest)
   | actTn == reqTn = (actQty >= reqQty) && tokenPairsContain actRest reqRest
   | actTn < reqTn = tokenPairsContain actRest reqAll
-  -- reqTn < actTn, required token not in actual
   | otherwise = (0 >= reqQty) && tokenPairsContain actAll reqRest
 
 -- ============================================================================
--- Credential / address helpers
+-- 4. Credential and address helpers
 -- ============================================================================
+-- Plutarch: paddressCredential, pscriptContextTxInfo,
+--           ptxInInfoResolved, ptxOutDatum, ptxOutValue
 
 {-# INLINEABLE getPaymentCredential #-}
 getPaymentCredential :: Address -> Credential
@@ -205,8 +218,9 @@ getStakingCredential :: Address -> Maybe StakingCredential
 getStakingCredential (Address _ mStake) = mStake
 
 -- ============================================================================
--- Check if a credential appears in withdrawals
+-- 5. Withdrawal and script info checking
 -- ============================================================================
+-- Plutarch: pisScriptInvokedEntries, pisRewardingScript, ptxSignedByPkh
 
 {-# INLINEABLE isScriptInvokedEntries #-}
 isScriptInvokedEntries :: Credential -> [(Credential, Lovelace)] -> Bool
@@ -214,10 +228,22 @@ isScriptInvokedEntries _ [] = False
 isScriptInvokedEntries cred ((c, _) : rest) =
   c == cred || isScriptInvokedEntries cred rest
 
--- ============================================================================
--- Check if a value has a specific CS as the first non-Ada entry
--- ============================================================================
+{-# INLINEABLE isRewardingScriptInfo #-}
+isRewardingScriptInfo :: ScriptInfo -> Bool
+isRewardingScriptInfo (RewardingScript _) = True
+isRewardingScriptInfo _ = False
 
+{-# INLINEABLE isSpendingPurpose #-}
+isSpendingPurpose :: ScriptPurpose -> Bool
+isSpendingPurpose (Spending _) = True
+isSpendingPurpose _ = False
+
+-- ============================================================================
+-- 6. Value CS checking
+-- ============================================================================
+-- Plutarch: phasCSH, phasCSHOrFalse
+
+-- | Check that the first non-Ada policy matches a state-token CS.
 {-# INLINEABLE hasCsFirstNonAda #-}
 hasCsFirstNonAda :: CurrencySymbol -> Value -> Bool
 hasCsFirstNonAda cs (Value m) =
@@ -225,14 +251,15 @@ hasCsFirstNonAda cs (Value m) =
     (_ : (cs', _) : _) -> cs' == cs
     _ -> False
 
--- | Safe version that returns False instead of crashing on missing non-Ada entries.
+-- | Safe variant that returns False instead of crashing on missing non-Ada entries.
 {-# INLINEABLE hasCsFirstNonAdaOrFalse #-}
 hasCsFirstNonAdaOrFalse :: CurrencySymbol -> Value -> Bool
 hasCsFirstNonAdaOrFalse = hasCsFirstNonAda
 
 -- ============================================================================
--- Aggregate value from / to a credential
+-- 7. Value aggregation
 -- ============================================================================
+-- Plutarch: pvalueFromCred, pvalueToCred
 
 {-# INLINEABLE valueFromCred #-}
 valueFromCred
@@ -276,8 +303,9 @@ valueToCred cred outputs =
           else go acc rest
 
 -- ============================================================================
--- outputsContainExpectedValueAtCred
+-- 8. Output containment check
 -- ============================================================================
+-- Plutarch: poutputsContainExpectedValueAtCred
 
 {-# INLINEABLE outputsContainExpectedValueAtCred #-}
 outputsContainExpectedValueAtCred :: Credential -> [TxOut] -> Value -> Bool
@@ -288,7 +316,6 @@ outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
         [(expCs, expTnPairs)] ->
           case expTnPairs of
             [(expTn, expQty)] ->
-              -- Single-asset fast path
               hasAtLeastAssetInProgOutputs expQty 0 expCs expTn txOutputs
             _ -> multiAssetCheck expectedCsPairs
         _ -> multiAssetCheck expectedCsPairs
@@ -315,8 +342,9 @@ outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
     assetQtyInValue actual cs tn >= qty && checkAllExpectedTnPairs actual cs rest
 
 -- ============================================================================
--- Find protocol parameter reference input
+-- 9. Reference input lookup
 -- ============================================================================
+-- Plutarch: pfindReferenceInputByCS
 
 {-# INLINEABLE findReferenceInputByCS #-}
 findReferenceInputByCS :: CurrencySymbol -> [TxInInfo] -> ProgrammableLogicGlobalParams
@@ -331,10 +359,6 @@ findReferenceInputByCS cs (TxInInfo _ txOut : rest) =
       _ -> traceError "protocol params datum missing"
     else findReferenceInputByCS cs rest
 
--- ============================================================================
--- Decode a DirectorySetNode from a TxOut's inline datum
--- ============================================================================
-
 {-# INLINEABLE decodeDirectoryNode #-}
 decodeDirectoryNode :: TxOut -> DirectorySetNode
 decodeDirectoryNode txOut =
@@ -346,8 +370,9 @@ decodeDirectoryNode txOut =
     _ -> traceError "directory node datum missing"
 
 -- ============================================================================
--- Transfer logic validation
+-- 10. Transfer logic validation
 -- ============================================================================
+-- Plutarch: pcheckTransferLogicAndGetProgrammableValue
 
 {-# INLINEABLE checkTransferLogicAndGetProgrammableValue #-}
 checkTransferLogicAndGetProgrammableValue
@@ -374,12 +399,10 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wi
         dirNodeTransferLogic = transferLogicScript dirNode
      in if nodeKey < currCS
           then
-            -- Negative proof: node key < currCS, must be covered (currCS < nodeNext)
             if currCS < nodeNext && hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
               then go proofsRest csPairsRest acc cachedTransferScript
               else traceError "dir neg-proof node must cover"
           else
-            -- Positive proof: nodeKey == currCS
             let transferScriptOk =
                   dirNodeTransferLogic
                     == cachedTransferScript
@@ -397,8 +420,9 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wi
                           else traceError "invalid dir node"
 
 -- ============================================================================
--- Mint logic validation
+-- 11. Mint logic validation
 -- ============================================================================
+-- Plutarch: pcheckMintLogicAndGetProgrammableValue
 
 {-# INLINEABLE checkMintLogicAndGetProgrammableValue #-}
 checkMintLogicAndGetProgrammableValue
@@ -427,7 +451,6 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
         dirNodeTransferLogic = transferLogicScript dirNode
      in if nodeKey == mintCs
           then
-            -- Positive proof: exact match
             let transferScriptOk = isScriptInvokedEntries dirNodeTransferLogic withdrawalEntries
                 validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
              in if transferScriptOk && validDirNode
@@ -437,7 +460,6 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
                       then traceError "Missing required transfer script"
                       else traceError "invalid dir node m"
           else
-            -- Negative proof: covering node
             let coverLower = nodeKey < mintCs
                 coverUpper = mintCs < nodeNext
                 validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
@@ -446,8 +468,14 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
                   else traceError "dir mint neg-proof node must cover"
 
 -- ============================================================================
--- SeizeAct: value delta for one currency symbol
+-- 12. Redeemer types and offchain helpers
 -- ============================================================================
+-- (imported from SmartTokens.Contracts.ProgrammableLogicBase)
+
+-- ============================================================================
+-- 13. SeizeAct: value delta
+-- ============================================================================
+-- Plutarch: pvalueEqualsDeltaCurrencySymbol
 
 {-# INLINEABLE valueEqualsDeltaCurrencySymbol #-}
 valueEqualsDeltaCurrencySymbol :: CurrencySymbol -> Value -> Value -> [(TokenName, Integer)]
@@ -487,13 +515,11 @@ valueEqualsDeltaCurrencySymbol progCS inputValue outputValue =
         []
     | otherwise = error ()
 
-{-# INLINEABLE dataEqual #-}
-dataEqual :: (PlutusTx.ToData a) => a -> a -> Bool
-dataEqual a b = PlutusTx.toBuiltinData a == PlutusTx.toBuiltinData b
-
 -- ============================================================================
--- SeizeAct: check corresponding input/output pairs and accumulate delta
+-- 14. SeizeAct: processThirdPartyTransfer
 -- ============================================================================
+-- Plutarch: pcheckCorrespondingThirdPartyTransferInputsAndOutputs,
+--           processThirdPartyTransfer
 
 {-# INLINEABLE processThirdPartyTransfer #-}
 processThirdPartyTransfer
@@ -519,6 +545,7 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
           (TxInInfo _ programmableInputResolved : afterIdx) ->
             checkCorrespondingPair programmableInputResolved restIdxs afterIdx programmableOutputs deltaAccumulator
 
+  -- Plutarch: pcheckCorrespondingThirdPartyTransferInputsAndOutputs
   checkCorrespondingPair :: TxOut -> [Integer] -> [TxInInfo] -> [TxOut] -> [(TokenName, Integer)] -> Bool
   checkCorrespondingPair inputTxOut remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator =
     let inputAddr = txOutAddress inputTxOut
@@ -529,7 +556,6 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
             (outputTxOut : outputsRest) ->
               let outputAddr = txOutAddress outputTxOut
                   addressMatch = inputAddr == outputAddr
-                  -- Check datum and reference script match
                   datumMatch = txOutDatum inputTxOut == txOutDatum outputTxOut
                   refScriptMatch = txOutReferenceScript inputTxOut == txOutReferenceScript outputTxOut
                in if addressMatch && datumMatch && refScriptMatch
@@ -540,11 +566,9 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
                       if not addressMatch
                         then traceError "corresponding output: address mismatch"
                         else traceError "corresponding output: datum/reference script mismatch"
-          else
-            -- Not at progLogicCred - must be a script input (constr idx 1)
-            case inputCred of
-              ScriptCredential _ -> go remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator
-              _ -> traceError "input index points to pubkey input"
+          else case inputCred of
+            ScriptCredential _ -> go remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator
+            _ -> traceError "input index points to pubkey input"
 
   accumulateProgOutputTokens :: [TxOut] -> [(TokenName, Integer)]
   accumulateProgOutputTokens [] = []
@@ -554,8 +578,9 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
       else accumulateProgOutputTokens rest
 
 -- ============================================================================
--- Redeemer map helpers for enforceNSpendRedeemers
+-- 15. Redeemer map helpers
 -- ============================================================================
+-- Plutarch: penforceNSpendRedeemers
 
 {-# INLINEABLE enforceNSpendRedeemers #-}
 enforceNSpendRedeemers :: Integer -> Map.Map ScriptPurpose Redeemer -> Bool
@@ -571,23 +596,10 @@ enforceNSpendRedeemers n rdmrs =
                    ((nextPurpose, _) : _) -> not (isSpendingPurpose nextPurpose)
                )
 
-{-# INLINEABLE isSpendingPurpose #-}
-isSpendingPurpose :: ScriptPurpose -> Bool
-isSpendingPurpose (Spending _) = True
-isSpendingPurpose _ = False
-
 -- ============================================================================
--- Is rewarding script info
+-- 16. Base validator (mkProgrammableLogicBase)
 -- ============================================================================
-
-{-# INLINEABLE isRewardingScriptInfo #-}
-isRewardingScriptInfo :: ScriptInfo -> Bool
-isRewardingScriptInfo (RewardingScript _) = True
-isRewardingScriptInfo _ = False
-
--- ============================================================================
--- mkProgrammableLogicBase
--- ============================================================================
+-- Plutarch: mkProgrammableLogicBase
 
 {-# INLINEABLE mkProgrammableLogicBaseValidator #-}
 mkProgrammableLogicBaseValidator :: BuiltinData -> BuiltinData -> ()
@@ -607,8 +619,9 @@ mkProgrammableLogicBaseValidator stakeCredData ctxData =
   hasCred c ((c', _) : rest) = c == c' || hasCred c rest
 
 -- ============================================================================
--- mkProgrammableLogicGlobal
+-- 17. Global validator (mkProgrammableLogicGlobal)
 -- ============================================================================
+-- Plutarch: mkProgrammableLogicGlobal
 
 {-# INLINEABLE mkProgrammableLogicGlobalValidator #-}
 mkProgrammableLogicGlobalValidator :: BuiltinData -> BuiltinData -> ()
@@ -623,11 +636,9 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
       referenceInputs = txInfoReferenceInputs txInfo_
       withdrawalEntries = Map.toList (txInfoWdrl txInfo_)
 
-      -- Decode redeemer
       red :: ProgrammableLogicGlobalRedeemer
       red = PlutusTx.unsafeFromBuiltinData (getRedeemer redeemer_)
 
-      -- Extract protocol parameters
       ProgrammableLogicGlobalParams{directoryNodeCS, progLogicCred} =
         findReferenceInputByCS protocolParamsCS referenceInputs
    in case red of
@@ -706,7 +717,7 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
                             else traceError "input index length mismatch"
 
 -- ============================================================================
--- Compiled scripts
+-- 18. Compiled scripts
 -- ============================================================================
 
 plinthProgrammableLogicBaseScript :: Script
