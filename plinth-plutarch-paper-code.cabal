@@ -112,3 +112,16 @@ test-suite conformance-tests
     , tasty
     , tasty-hunit
     , tasty-quickcheck
+
+executable measure-code-size
+  import:         base, project-config
+  hs-source-dirs: utils
+  main-is:        MeasureCodeSize.hs
+  ghc-options:
+    -threaded -Wno-missing-import-lists -Wno-missing-export-lists
+    -Wno-missing-deriving-strategies
+
+  build-depends:
+    , containers
+    , filepath
+    , haskell-src-exts
