@@ -52,6 +52,9 @@ library
   import:          base, project-config
   hs-source-dirs:  src
   exposed-modules:
+    Constitution.Contracts.ConstitutionSorted
+    Constitution.Contracts.ConstitutionSortedPlinth
+    Constitution.Types.ConstitutionConfig
     Example
     Hydra.Contracts.Head
     Hydra.Contracts.HeadPlinth
@@ -82,6 +85,7 @@ executable bench-scripts
     -Wno-missing-export-lists
 
   other-modules:
+    Constitution.Test.ConstitutionSorted
     Hydra.Test.Head
     ProgrammableTokens.Test.ScriptContext.Builder
 
@@ -108,6 +112,7 @@ test-suite conformance-tests
     -Wno-missing-export-lists
 
   other-modules:
+    Constitution.Test.ConstitutionSorted
     Hydra.Test.Head
     ProgrammableTokens.Test.ProgrammableLogicGlobal
     ProgrammableTokens.Test.ScriptContext.Builder

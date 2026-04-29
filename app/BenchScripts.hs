@@ -4,6 +4,10 @@
 
 module Main where
 
+import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
+import Constitution.Contracts.ConstitutionSortedPlinth (plinthConstitutionScript)
+import Constitution.Test.ConstitutionSorted qualified as ConstitutionSorted
+import Constitution.Types.ConstitutionConfig (ParamValue)
 import Data.ByteString qualified as BS
 import Data.Either (isRight)
 import Data.Word (Word8)
@@ -36,6 +40,9 @@ import Text.Printf (printf)
 plutarchHeadScript :: Script
 plutarchHeadScript = compileNoTracing mkHeadValidator
 
+plutarchConstitutionScript :: Script
+plutarchConstitutionScript = compileNoTracing mkConstitutionValidator
+
 main :: IO ()
 main = do
   putStrLn ""
@@ -50,6 +57,13 @@ main = do
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runHeadComparison plutarchHeadScript plinthHeadScript) HydraHead.headBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Constitution Sorted Validator -- Execution Cost Comparison"
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runConstitutionComparison plutarchConstitutionScript plinthConstitutionScript) ConstitutionSorted.constitutionBenchScenarios
   putStrLn (replicate 140 '=')
 
 printHeader :: IO ()
@@ -106,6 +120,23 @@ evalHeadWith script ctx =
       (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
       ok = isRight res
    in (ok, show cpu, show mem)
+
+evalConstitutionWith :: Script -> [(Integer, ParamValue)] -> ScriptContext -> (Bool, String, String)
+evalConstitutionWith script config ctx =
+  let applied = applyArguments script [PlutusTx.toData config, PlutusTx.toData ctx]
+      (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
+      ok = isRight res
+   in (ok, show cpu, show mem)
+
+runConstitutionComparison :: Script -> Script -> (String, [(Integer, ParamValue)], ScriptContext) -> IO ()
+runConstitutionComparison plutarchS plinthS (name, config, ctx) = do
+  let (okP, cpuP, memP) = evalConstitutionWith plutarchS config ctx
+      (okT, cpuT, memT) = evalConstitutionWith plinthS config ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
 
 runHeadComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runHeadComparison plutarchS plinthS (name, ctx) = do

@@ -50,6 +50,7 @@ module ProgrammableTokens.Test.ScriptContext.Builder (
   buildBalancedScriptContext,
   balanceWithChangeOutput,
   builderPlaceHolderTxOutRef,
+  withProposingScript,
 ) where
 
 import Data.Function (on)
@@ -438,6 +439,15 @@ withWithdrawal :: Credential -> Integer -> ScriptContextBuilder
 withWithdrawal cred adaAmount = ScriptContextBuilder $ \scb ->
   let newWdrl = Map.insert cred (fromIntegral adaAmount) (scbWdrl scb)
    in scb{scbWdrl = newWdrl}
+
+withProposingScript :: BuiltinData -> ProposalProcedure -> ScriptContextBuilder
+withProposingScript redeemer proposal = ScriptContextBuilder $ \scb ->
+  let newRedeemers = Map.insert (Proposing 0 proposal) (Redeemer redeemer) (scbRedeemers scb)
+   in scb
+        { scbRedeemers = newRedeemers
+        , scbRedeemer = redeemer
+        , scbScriptInfo = ProposingScript 0 proposal
+        }
 
 withRedeemer :: BuiltinData -> ScriptContextBuilder
 withRedeemer redeemer = ScriptContextBuilder $ \scb -> scb{scbRedeemer = redeemer}
