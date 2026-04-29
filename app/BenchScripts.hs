@@ -26,6 +26,7 @@ import SmartTokens.Contracts.ProgrammableLogicBase
 import SmartTokens.Contracts.ProgrammableLogicBasePlinth (plinthProgrammableLogicGlobalScript)
 import SmartTokens.Types.Constants (protocolParamsToken)
 import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
+import SmartTokens.Types.ProgrammableLogicGlobal
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Text.Printf (printf)
 

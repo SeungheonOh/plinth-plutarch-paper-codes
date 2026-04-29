@@ -15,25 +15,18 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 module SmartTokens.Contracts.ProgrammableLogicBase (
-  ProgrammableLogicGlobalRedeemer (..),
-  absoluteToRelativeInputIdxs,
-  mkSeizeActRedeemerFromAbsoluteInputIdxs,
-  mkSeizeActRedeemerFromRelativeInputIdxs,
   mkProgrammableLogicBase,
   mkProgrammableLogicGlobal,
-  pisScriptInvokedEntries,
-  pvalueFromCred,
-  pvalueToCred,
-  poutputsContainExpectedValueAtCred,
+  isScriptInvokedEntries,
+  valueFromCred,
+  valueToCred,
+  outputsContainExpectedValueAtCred,
   pscriptContextTxInfo,
 ) where
 
 import Data.Kind (Type)
 import Data.List (foldl')
-import GHC.Generics (Generic)
-import Generics.SOP qualified as SOP
 import Plutarch.Builtin.Integer (pconstantInteger)
-import Plutarch.Internal.Lift ()
 import Plutarch.Internal.Term (punsafeBuiltin)
 import Plutarch.LedgerApi.V3
 import Plutarch.Monadic qualified as P
@@ -41,116 +34,111 @@ import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusCore qualified as PLC
 import PlutusLedgerApi.V1.Value (Value)
-import PlutusTx qualified
 import SmartTokens.Types.PTokenDirectory (PDirectorySetNode (..))
+import SmartTokens.Types.ProgrammableLogicGlobal (PProgrammableLogicGlobalRedeemer (..))
 import SmartTokens.Types.ProtocolParams (PProgrammableLogicGlobalParams (..))
 
 -- ============================================================================
 -- 1. Plutarch infrastructure
 -- ============================================================================
--- Plinth: compiledCodeToScript, dataEqual
 
 type PType = S -> Type
 type ClosedTerm (a :: PType) = forall (s :: S). Term s a
 
-pmapData :: Term s (PBuiltinList (PBuiltinPair PData PData) :--> PData)
-pmapData = punsafeBuiltin PLC.MapData
+mapData :: Term s (PBuiltinList (PBuiltinPair PData PData) :--> PData)
+mapData = punsafeBuiltin PLC.MapData
 
-ppairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
-ppairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
+pairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
+pairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
 
 -- | Unsafely unwrap a PMaybeData known to be Just.
-pjustData :: Term s (PMaybeData a) -> Term s a
-pjustData term =
+justData :: Term s (PMaybeData a) -> Term s a
+justData term =
   punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))
 
-pand'List :: [Term s PBool] -> Term s PBool
-pand'List ts' = case ts' of
+and'List :: [Term s PBool] -> Term s PBool
+and'List ts' = case ts' of
   [] -> pconstant True
   ts -> foldl1 (\res x -> pand' # res # x) ts
 
-pvalidateConditions :: [Term s PBool] -> Term s PUnit
-pvalidateConditions conds = pif (pand'List conds) (pconstant ()) perror
+validateConditions :: [Term s PBool] -> Term s PUnit
+validateConditions conds = pif (and'List conds) (pconstant ()) perror
 
 -- ============================================================================
 -- 2. List operations
 -- ============================================================================
--- Plinth: dropList, listLength, appendList, pkhElem, isNullList, indexList
 
-pnTails :: (PIsListLike list a) => Integer -> Term s (list a) -> Term s (list a)
-pnTails n xs = foldl' (\acc _ -> ptail # acc) xs (replicate (fromIntegral n) ())
+nTails :: (PIsListLike list a) => Integer -> Term s (list a) -> Term s (list a)
+nTails n xs = foldl' (\acc _ -> ptail # acc) xs (replicate (fromIntegral n) ())
 
-ptails10 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
-ptails10 = phoistAcyclic $ plam (pnTails 10)
+tails10 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
+tails10 = phoistAcyclic $ plam (nTails 10)
 
-ptails20 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
-ptails20 = phoistAcyclic $ plam (\xs -> ptails10 # (ptails10 # xs))
+tails20 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
+tails20 = phoistAcyclic $ plam (\xs -> tails10 # (tails10 # xs))
 
-ptails30 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
-ptails30 = phoistAcyclic $ plam (\xs -> ptails20 # (ptails10 # xs))
+tails30 :: (PIsListLike list a) => ClosedTerm (list a :--> list a)
+tails30 = phoistAcyclic $ plam (\xs -> tails20 # (tails10 # xs))
 
-pdropR :: forall (list :: PType -> PType) (a :: PType) (s :: S). (PIsListLike list a) => Term s (PInteger :--> list a :--> list a)
-pdropR = phoistAcyclic $ pfix #$ plam $ \self n ys -> pif (n #== 0) ys (self # (n - 1) # (ptail # ys))
+dropR :: forall (list :: PType -> PType) (a :: PType) (s :: S). (PIsListLike list a) => Term s (PInteger :--> list a :--> list a)
+dropR = phoistAcyclic $ pfix #$ plam $ \self n ys -> pif (n #== 0) ys (self # (n - 1) # (ptail # ys))
 
-pdropFast :: (PIsListLike PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PBuiltinList a)
-pdropFast = phoistAcyclic $
+dropFast :: (PIsListLike PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PBuiltinList a)
+dropFast = phoistAcyclic $
   pfix #$ plam $ \self n ys ->
     pcond
-      [ (30 #<= n, self # (n - 30) # (ptails30 # ys))
-      , (20 #<= n, self # (n - 20) # (ptails20 # ys))
-      , (10 #<= n, self # (n - 10) # (ptails10 # ys))
+      [ (30 #<= n, self # (n - 30) # (tails30 # ys))
+      , (20 #<= n, self # (n - 20) # (tails20 # ys))
+      , (10 #<= n, self # (n - 10) # (tails10 # ys))
       ]
-      (pdropR # n # ys)
+      (dropR # n # ys)
 
-pbuiltinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
-pbuiltinListLength acc =
+builtinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
+builtinListLength acc =
   ( pfix #$ plam $ \self acc' l ->
       pelimList (\_ ys -> self # (acc' + 1) # ys) acc' l
   )
     # acc
 
-pbuiltinListLengthFast :: forall (a :: PType) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
-pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
+builtinListLengthFast :: forall (a :: PType) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
+builtinListLengthFast = phoistAcyclic $ plam $ \n elems ->
   let go :: Term _ (PInteger :--> PInteger :--> PBuiltinList a :--> PInteger)
       go = pfix #$ plam $ \self remainingExpected currentCount xs ->
         pcond
-          [ (30 #<= remainingExpected, self # (remainingExpected - 30) # (currentCount + 30) # (ptails30 # xs))
-          , (20 #<= remainingExpected, self # (remainingExpected - 20) # (currentCount + 20) # (ptails20 # xs))
-          , (10 #<= remainingExpected, self # (remainingExpected - 10) # (currentCount + 10) # (ptails10 # xs))
+          [ (30 #<= remainingExpected, self # (remainingExpected - 30) # (currentCount + 30) # (tails30 # xs))
+          , (20 #<= remainingExpected, self # (remainingExpected - 20) # (currentCount + 20) # (tails20 # xs))
+          , (10 #<= remainingExpected, self # (remainingExpected - 10) # (currentCount + 10) # (tails10 # xs))
           ]
-          (currentCount + pbuiltinListLength 0 # xs)
+          (currentCount + builtinListLength 0 # xs)
    in go # n # 0 # elems
 
 -- ============================================================================
 -- 3. Value helpers
 -- ============================================================================
--- Plinth: valueToSortedList, sortedListToValue, emptyValue, stripAda,
---         tokenPairsUnion, currencyPairsUnion, valueUnion, assetQtyInValue,
---         tokensForCurrencySymbol, negateTokens, subtractTokens, tokenPairsContain
 
 emptyValue :: Value
 emptyValue = mempty
 
-pemptyLedgerValue :: Term s (PValue 'Sorted 'Positive)
-pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
+emptyLedgerValue :: Term s (PValue 'Sorted 'Positive)
+emptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
 
 -- | Strip Ada (first entry) from a ledger-provided sorted value.
-pstripAdaH
+stripAda
   :: forall (v :: AmountGuarantees) (s :: S)
    . Term s (PValue 'Sorted v) -> Term s (PValue 'Sorted v)
-pstripAdaH value =
+stripAda value =
   let nonAdaValueMapInner = ptail # pto (pto value)
    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
 
 -- | Merge two sorted token-name maps by asset-wise addition.
-ptokenPairsUnionFast
+tokenPairsUnion
   :: Term
        s
        ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
        )
-ptokenPairsUnionFast = phoistAcyclic $
+tokenPairsUnion = phoistAcyclic $
   pfix #$ plam $ \self tokensA tokensB ->
     pelimList
       ( \tokenPairA tokensARest ->
@@ -181,14 +169,14 @@ ptokenPairsUnionFast = phoistAcyclic $
       tokensA
 
 -- | Merge two sorted currency-symbol maps by asset-wise addition.
-pcurrencyPairsUnionFast
+currencyPairsUnion
   :: Term
        s
        ( PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger)))
            :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger)))
            :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger)))
        )
-pcurrencyPairsUnionFast = phoistAcyclic $
+currencyPairsUnion = phoistAcyclic $
   pfix #$ plam $ \self csPairsA csPairsB ->
     pelimList
       ( \csPairA csPairsARest ->
@@ -202,12 +190,12 @@ pcurrencyPairsUnionFast = phoistAcyclic $
                       (currencySymbolABytes #== currencySymbolBBytes)
                       ( let tokenPairsA = pto (pfromData (psndBuiltin # csPairA))
                             tokenPairsB = pto (pfromData (psndBuiltin # csPairB))
-                            mergedTokenPairs = ptokenPairsUnionFast # tokenPairsA # tokenPairsB
+                            mergedTokenPairs = tokenPairsUnion # tokenPairsA # tokenPairsB
                             mergedPair =
                               punsafeCoerce $
-                                ppairDataBuiltinRaw
+                                pairDataBuiltinRaw
                                   # pforgetData currencySymbolA
-                                  # (pmapData # punsafeCoerce mergedTokenPairs)
+                                  # (mapData # punsafeCoerce mergedTokenPairs)
                          in pcons
                               # mergedPair
                               # (self # csPairsARest # csPairsBRest)
@@ -225,18 +213,18 @@ pcurrencyPairsUnionFast = phoistAcyclic $
       csPairsA
 
 -- | Add two sorted non-Ada Values.
-pvalueUnionFast :: Term s (PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive)
-pvalueUnionFast = phoistAcyclic $ plam $ \valueA valueB ->
+valueUnion :: Term s (PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive)
+valueUnion = phoistAcyclic $ plam $ \valueA valueB ->
   pcon $
     PValue $
       pcon $
         PMap $
-          pcurrencyPairsUnionFast
+          currencyPairsUnion
             # pto (pto valueA)
             # pto (pto valueB)
 
 -- | Get the quantity of a specific asset in a value.
-passetQtyInValue
+assetQtyInValue
   :: Term
        s
        ( PValue 'Sorted 'Positive
@@ -244,7 +232,7 @@ passetQtyInValue
            :--> PTokenName
            :--> PInteger
        )
-passetQtyInValue = phoistAcyclic $ plam $ \value cs tn ->
+assetQtyInValue = phoistAcyclic $ plam $ \value cs tn ->
   let tokenQtyInTokenPairs = pfix #$ plam $ \self remainingTokenPairs ->
         pelimList
           ( \tokenPair tokenPairsRest ->
@@ -280,10 +268,10 @@ passetQtyInValue = phoistAcyclic $ plam $ \value cs tn ->
    in tokenQtyInCurrencyPairs # pto (pto value)
 
 -- | Get token pairs for a specific currency symbol from a sorted value.
-ptokensForCurrencySymbol
+tokensForCurrencySymbol
   :: forall anyAmount s
    . Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-ptokensForCurrencySymbol =
+tokensForCurrencySymbol =
   phoistAcyclic $
     plam $ \targetCs mintValue ->
       let mintedEntries :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
@@ -302,8 +290,8 @@ ptokensForCurrencySymbol =
        in go # mintedEntries
 
 -- | Negate all quantities in a token-name map.
-pnegateTokens :: Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-pnegateTokens = pfix #$ plam $ \self tokens ->
+negateTokens :: Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+negateTokens = pfix #$ plam $ \self tokens ->
   pelimList
     ( \tokenPair tokensRest ->
         let tokenName = pfstBuiltin # tokenPair
@@ -314,14 +302,14 @@ pnegateTokens = pfix #$ plam $ \self tokens ->
     tokens
 
 -- | Subtract token pairs: input - output, skipping zero results.
-psubtractTokens
+subtractTokens
   :: Term
        s
        ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
        )
-psubtractTokens = phoistAcyclic $
+subtractTokens = phoistAcyclic $
   pfix #$ plam $ \self inputTokens outputTokens ->
     pelimList
       ( \inputPair inputRest ->
@@ -359,18 +347,18 @@ psubtractTokens = phoistAcyclic $
                   inputRest
                   outputTokens
       )
-      (pnegateTokens # outputTokens)
+      (negateTokens # outputTokens)
       inputTokens
 
 -- | Check that actualTokens contain at least requiredTokens quantities.
-ptokenPairsContain
+tokenPairsContain
   :: Term
        s
        ( PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
            :--> PBool
        )
-ptokenPairsContain = phoistAcyclic $
+tokenPairsContain = phoistAcyclic $
   pfix #$ plam $ \self actualTokens requiredTokens ->
     pelimList
       ( \requiredPair requiredRest ->
@@ -398,10 +386,9 @@ ptokenPairsContain = phoistAcyclic $
 -- ============================================================================
 -- 4. Credential and address helpers
 -- ============================================================================
--- Plinth: getPaymentCredential, getStakingCredential
 
-paddressCredential :: Term s PAddress -> Term s PCredential
-paddressCredential addr = pmatch addr $ \addr' -> paddress'credential addr'
+getPaymentCredential :: Term s PAddress -> Term s PCredential
+getPaymentCredential addr = pmatch addr $ \addr' -> paddress'credential addr'
 
 pscriptContextTxInfo :: Term s PScriptContext -> Term s PTxInfo
 pscriptContextTxInfo ctx = pmatch ctx $ \ctx' -> pscriptContext'txInfo ctx'
@@ -418,11 +405,10 @@ ptxOutValue = flip pmatch $ \txo -> ptxOut'value txo
 -- ============================================================================
 -- 5. Withdrawal and script info checking
 -- ============================================================================
--- Plinth: isScriptInvokedEntries, isRewardingScriptInfo, isSpendingPurpose
 
 -- | Check whether a credential appears in withdrawals.
-pisScriptInvokedEntries :: Term s (PAsData PCredential :--> PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)) :--> PBool)
-pisScriptInvokedEntries = phoistAcyclic $ plam $ \scriptCredData withdrawalEntries ->
+isScriptInvokedEntries :: Term s (PAsData PCredential :--> PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)) :--> PBool)
+isScriptInvokedEntries = phoistAcyclic $ plam $ \scriptCredData withdrawalEntries ->
   let go = pfix #$ plam $ \self entries ->
         let entry = phead # entries
          in (pfstBuiltin # entry)
@@ -436,27 +422,26 @@ pisScriptInvokedEntries = phoistAcyclic $ plam $ \scriptCredData withdrawalEntri
    in go # withdrawalEntries
 
 -- | Check if ScriptInfo is a rewarding script.
-pisRewardingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisRewardingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
+isRewardingScriptInfo :: Term s (PAsData PScriptInfo) -> Term s PBool
+isRewardingScriptInfo term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
 
 -- | Check if tx is signed by a pubkey hash.
-ptxSignedByPkh :: Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
-ptxSignedByPkh = pelem
+txSignedByPkh :: Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
+txSignedByPkh = pelem
 
 -- ============================================================================
 -- 6. Value CS checking
 -- ============================================================================
--- Plinth: hasCsFirstNonAda, hasCsFirstNonAdaOrFalse
 
 -- | Check that the first non-Ada policy matches a state-token CS.
-phasCSH :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
-phasCSH directoryNodeCS value =
+hasCsFirstNonAda :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
+hasCsFirstNonAda directoryNodeCS value =
   let value' = pto (pto (pfromData value))
    in pfromData (pfstBuiltin # (phead # (ptail # value'))) #== directoryNodeCS
 
 -- | Safe variant that returns False instead of crashing on missing non-Ada entries.
-phasCSHOrFalse :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
-phasCSHOrFalse directoryNodeCS value =
+hasCsFirstNonAdaOrFalse :: Term s PCurrencySymbol -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PBool
+hasCsFirstNonAdaOrFalse directoryNodeCS value =
   let nonAdaEntries = ptail # pto (pto (pfromData value))
    in pelimList
         (\currencyPair _ -> pfromData (pfstBuiltin # currencyPair) #== directoryNodeCS)
@@ -466,16 +451,15 @@ phasCSHOrFalse directoryNodeCS value =
 -- ============================================================================
 -- 7. Value aggregation
 -- ============================================================================
--- Plinth: valueFromCred, valueToCred
 
 -- | Aggregate all non-Ada input value controlled by a payment credential.
-pvalueFromCred
+valueFromCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PPubKeyHash))
   -> Term s (PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)))
   -> Term s (PBuiltinList (PAsData PTxInInfo))
   -> Term s (PValue 'Sorted 'Positive)
-pvalueFromCred cred sigs withdrawalEntries inputs =
+valueFromCred cred sigs withdrawalEntries inputs =
   let credData = pforgetData (pdata cred)
    in ( pfix #$ plam $ \self acc ->
           pelimList
@@ -490,19 +474,19 @@ pvalueFromCred cred sigs withdrawalEntries inputs =
                      in self
                           # pif
                             (paymentCredData #== credData)
-                            ( pmatch (pjustData stakingCredMaybe) $ \case
+                            ( pmatch (justData stakingCredMaybe) $ \case
                                 PStakingHash ownerCred ->
                                   pmatch ownerCred $ \case
                                     PPubKeyCredential pkh ->
                                       pif
-                                        (ptxSignedByPkh # pkh # sigs)
-                                        (pvalueUnionFast # acc # pstripAdaH (pfromData resolvedOutValue))
+                                        (txSignedByPkh # pkh # sigs)
+                                        (valueUnion # acc # stripAda (pfromData resolvedOutValue))
                                         (ptraceInfoError "Missing required pk witness")
                                     PScriptCredential scriptHash_ ->
                                       let scriptCredData = pdata $ pcon (PScriptCredential scriptHash_)
                                        in pif
-                                            (pisScriptInvokedEntries # scriptCredData # withdrawalEntries)
-                                            (pvalueUnionFast # acc # pstripAdaH (pfromData resolvedOutValue))
+                                            (isScriptInvokedEntries # scriptCredData # withdrawalEntries)
+                                            (valueUnion # acc # stripAda (pfromData resolvedOutValue))
                                             (ptraceInfoError "Missing required script witness")
                                 _ -> perror
                             )
@@ -511,15 +495,15 @@ pvalueFromCred cred sigs withdrawalEntries inputs =
             )
             acc
       )
-        # pemptyLedgerValue
+        # emptyLedgerValue
         # inputs
 
 -- | Aggregate all non-Ada output value at a payment credential.
-pvalueToCred
+valueToCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PTxOut))
   -> Term s (PValue 'Sorted 'Positive)
-pvalueToCred cred inputs =
+valueToCred cred inputs =
   let credData = pforgetData (pdata cred)
    in ( pfix #$ plam $ \self acc ->
           pelimList
@@ -527,28 +511,27 @@ pvalueToCred cred inputs =
                 plet (psndBuiltin # (pasConstr # pforgetData txOut)) $ \txOutFields ->
                   let txOutAddress = phead # txOutFields
                       txOutFieldsRest = ptail # txOutFields
-                      txOutValue = punsafeCoerce @(PAsData (PValue 'Sorted 'Positive)) (phead # txOutFieldsRest)
+                      ptxOutValue = punsafeCoerce @(PAsData (PValue 'Sorted 'Positive)) (phead # txOutFieldsRest)
                       paymentCredData = phead # (psndBuiltin # (pasConstr # txOutAddress))
                    in self
-                        # pif (paymentCredData #== credData) (pvalueUnionFast # acc # pstripAdaH (pfromData txOutValue)) acc
+                        # pif (paymentCredData #== credData) (valueUnion # acc # stripAda (pfromData ptxOutValue)) acc
                         # xs
             )
             acc
       )
-        # pemptyLedgerValue
+        # emptyLedgerValue
         # inputs
 
 -- ============================================================================
 -- 8. Output containment check
 -- ============================================================================
--- Plinth: outputsContainExpectedValueAtCred
 
-poutputsContainExpectedValueAtCred
+outputsContainExpectedValueAtCred
   :: Term s PCredential
   -> Term s (PBuiltinList (PAsData PTxOut))
   -> Term s (PValue 'Sorted 'Positive)
   -> Term s PBool
-poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
+outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
   let
     hasAtLeastAssetInProgOutputs = pfix #$ plam $ \self requiredQty currentQty cs tn remainingOutputs ->
       pif
@@ -558,8 +541,8 @@ poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
             ( \txOut outputsRest ->
                 pmatch (pfromData txOut) $ \(PTxOut{ptxOut'address, ptxOut'value}) ->
                   pif
-                    (paddressCredential ptxOut'address #== progLogicCred)
-                    (self # requiredQty # (currentQty + (passetQtyInValue # pfromData ptxOut'value # cs # tn)) # cs # tn # outputsRest)
+                    (getPaymentCredential ptxOut'address #== progLogicCred)
+                    (self # requiredQty # (currentQty + (assetQtyInValue # pfromData ptxOut'value # cs # tn)) # cs # tn # outputsRest)
                     (self # requiredQty # currentQty # cs # tn # outputsRest)
             )
             (currentQty #>= requiredQty)
@@ -570,7 +553,7 @@ poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
         ( \expectedTokenPair expectedTokenPairsRest ->
             let expectedTokenName = pfromData (pfstBuiltin # expectedTokenPair)
                 expectedTokenQty = pfromData (psndBuiltin # expectedTokenPair)
-             in (passetQtyInValue # actualValue # expectedCurrencySymbol # expectedTokenName #>= expectedTokenQty)
+             in (assetQtyInValue # actualValue # expectedCurrencySymbol # expectedTokenName #>= expectedTokenQty)
                   #&& self
                   # actualValue
                   # expectedCurrencySymbol
@@ -594,7 +577,7 @@ poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
         (pconstant True)
         remainingExpectedCurrencyPairs
     expectedCsPairs = pto (pto expectedValue)
-    actualValueAtCred = pvalueToCred progLogicCred txOutputs
+    actualValueAtCred = valueToCred progLogicCred txOutputs
    in
     pelimList
       ( \firstExpectedCsPair expectedCsPairsRest ->
@@ -624,13 +607,12 @@ poutputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
 -- ============================================================================
 -- 9. Reference input lookup
 -- ============================================================================
--- Plinth: findReferenceInputByCS, decodeDirectoryNode
 
-pfindReferenceInputByCS
+findReferenceInputByCS
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
   -> Term s PProgrammableLogicGlobalParams
-pfindReferenceInputByCS currencySymbol referenceInputs =
+findReferenceInputByCS currencySymbol referenceInputs =
   let extractParams resolvedOut =
         pmatch (ptxOutDatum resolvedOut) $ \case
           POutputDatum paramDat' ->
@@ -640,7 +622,7 @@ pfindReferenceInputByCS currencySymbol referenceInputs =
         let txIn = phead # remainingRefInputs
          in plet (ptxInInfoResolved $ pfromData txIn) $ \resolvedOut ->
               pif
-                (phasCSHOrFalse currencySymbol (ptxOutValue resolvedOut))
+                (hasCsFirstNonAdaOrFalse currencySymbol (ptxOutValue resolvedOut))
                 (extractParams resolvedOut)
                 (self # (ptail # remainingRefInputs))
    in go # referenceInputs
@@ -648,9 +630,8 @@ pfindReferenceInputByCS currencySymbol referenceInputs =
 -- ============================================================================
 -- 10. Transfer logic validation
 -- ============================================================================
--- Plinth: checkTransferLogicAndGetProgrammableValue
 
-pcheckTransferLogicAndGetProgrammableValue
+checkTransferLogicAndGetProgrammableValue
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
   -> Term s (PBuiltinList (PAsData PInteger))
@@ -658,7 +639,7 @@ pcheckTransferLogicAndGetProgrammableValue
   -> Term s (PAsData PCredential)
   -> Term s (PValue 'Sorted 'Positive)
   -> Term s (PValue 'Sorted 'Positive)
-pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries initialCachedTransferScript totalValue =
+checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries initialCachedTransferScript totalValue =
   let mapInnerList :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
       mapInnerList = pto (pto totalValue)
       go = pfix #$ plam $ \self proofs inputInnerValue actualProgrammableTokenValue cachedTransferScript ->
@@ -666,7 +647,7 @@ pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList w
           ( \csPair csPairs ->
               P.do
                 PTxOut{ptxOut'value = directoryNodeUTxOFValue, ptxOut'datum = directoryNodeUTxOFDatum} <-
-                  pmatch $ ptxInInfoResolved (pfromData $ phead # (pdropFast # pfromData (phead # proofs) # refInputs))
+                  pmatch $ ptxInInfoResolved (pfromData $ phead # (dropFast # pfromData (phead # proofs) # refInputs))
                 POutputDatum directoryNodeDatum' <- pmatch directoryNodeUTxOFDatum
                 PDirectorySetNode
                   { pkey = directoryNodeDatumFkey
@@ -680,9 +661,9 @@ pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList w
                 pif
                   (nodeKey #< currCS)
                   ( let checks =
-                          pand'List
+                          and'List
                             [ ptraceInfoIfFalse "dir neg-proof node must cover" (currCS #< nodeNext)
-                            , ptraceInfoIfFalse "invalid dir node n" (phasCSH directoryNodeCS directoryNodeUTxOFValue)
+                            , ptraceInfoIfFalse "invalid dir node n" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
                             ]
                      in pif
                           checks
@@ -695,12 +676,12 @@ pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList w
                           perror
                   )
                   ( let checks =
-                          pand'List
+                          and'List
                             [ ptraceInfoIfFalse "Missing required transfer script" $
                                 (directoryNodeDatumFTransferLogicScript #== cachedTransferScript)
-                                  #|| (pisScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
+                                  #|| (isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
                             , ptraceInfoIfFalse "directory proof mismatch" (nodeKey #== currCS)
-                            , ptraceInfoIfFalse "invalid dir node" (phasCSH directoryNodeCS directoryNodeUTxOFValue)
+                            , ptraceInfoIfFalse "invalid dir node" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
                             ]
                      in pif
                           checks
@@ -718,22 +699,21 @@ pcheckTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList w
    in go
         # proofList
         # mapInnerList
-        # pto (pto pemptyLedgerValue)
+        # pto (pto emptyLedgerValue)
         # initialCachedTransferScript
 
 -- ============================================================================
 -- 11. Mint logic validation
 -- ============================================================================
--- Plinth: checkMintLogicAndGetProgrammableValue
 
-pcheckMintLogicAndGetProgrammableValue
+checkMintLogicAndGetProgrammableValue
   :: Term s PCurrencySymbol
   -> Term s (PBuiltinList (PAsData PTxInInfo))
   -> Term s (PBuiltinList (PAsData PInteger))
   -> Term s (PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)))
   -> Term s (PValue 'Sorted 'NoGuarantees)
   -> Term s (PValue 'Sorted 'NoGuarantees)
-pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries totalMintValue =
+checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries totalMintValue =
   let mintedEntries :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap 'Sorted PTokenName PInteger))))
       mintedEntries = pto (pto totalMintValue)
       go = pfix #$ plam $ \self proofs remainingMintEntries programmableMintValue ->
@@ -744,7 +724,7 @@ pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withd
                     let mintCs = pfstBuiltin # mintCsPair
                      in P.do
                           PTxOut{ptxOut'value = directoryNodeUTxOFValue, ptxOut'datum = directoryNodeUTxOFDatum} <-
-                            pmatch $ ptxInInfoResolved (pfromData $ phead # (pdropFast # pfromData nodeIdx # refInputs))
+                            pmatch $ ptxInInfoResolved (pfromData $ phead # (dropFast # pfromData nodeIdx # refInputs))
                           POutputDatum paramDat' <- pmatch directoryNodeUTxOFDatum
                           PDirectorySetNode
                             { pkey = directoryNodeDatumFkey
@@ -758,9 +738,9 @@ pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withd
                           pif
                             (nodeKey #== currCS)
                             ( let checks =
-                                    pand'List
-                                      [ ptraceInfoIfFalse "Missing required transfer script" (pisScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
-                                      , ptraceInfoIfFalse "invalid dir node m" (phasCSH directoryNodeCS directoryNodeUTxOFValue)
+                                    and'List
+                                      [ ptraceInfoIfFalse "Missing required transfer script" (isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
+                                      , ptraceInfoIfFalse "invalid dir node m" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
                                       ]
                                in pif
                                     checks
@@ -768,10 +748,10 @@ pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withd
                                     perror
                             )
                             ( let checks =
-                                    pand'List
+                                    and'List
                                       [ ptraceInfoIfFalse "dir mint neg-proof node must cover" (nodeKey #< currCS)
                                       , ptraceInfoIfFalse "dir mint neg-proof node must cover" (currCS #< nodeNext)
-                                      , ptraceInfoIfFalse "invalid dir node n" (phasCSH directoryNodeCS directoryNodeUTxOFValue)
+                                      , ptraceInfoIfFalse "invalid dir node n" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
                                       ]
                                in pif
                                     checks
@@ -787,89 +767,17 @@ pcheckMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withd
    in go # proofList # mintedEntries # pnil
 
 -- ============================================================================
--- 12. Redeemer types and offchain helpers
+-- 12. SeizeAct: value delta
 -- ============================================================================
--- Plinth: imports ProgrammableLogicGlobalRedeemer from this module
-
-data ProgrammableLogicGlobalRedeemer
-  = TransferAct
-      { plgrTransferProofs :: [Integer]
-      , plgrMintProofs :: [Integer]
-      }
-  | SeizeAct
-      { plgrDirectoryNodeIdx :: Integer
-      , plgrInputIdxs :: [Integer]
-      , plgrOutputsStartIdx :: Integer
-      , plgrLengthInputIdxs :: Integer
-      }
-  deriving (Show, Eq, Generic)
-
-PlutusTx.makeIsDataIndexed
-  ''ProgrammableLogicGlobalRedeemer
-  [('TransferAct, 0), ('SeizeAct, 1)]
-
-absoluteToRelativeInputIdxs :: [Integer] -> [Integer]
-absoluteToRelativeInputIdxs [] = []
-absoluteToRelativeInputIdxs (firstAbsIdx : remainingAbsIdxs)
-  | firstAbsIdx < 0 = error "absoluteToRelativeInputIdxs: negative absolute index"
-  | otherwise = firstAbsIdx : go firstAbsIdx remainingAbsIdxs
- where
-  go :: Integer -> [Integer] -> [Integer]
-  go _ [] = []
-  go previousAbsIdx (currentAbsIdx : restAbsIdxs)
-    | currentAbsIdx <= previousAbsIdx = error "absoluteToRelativeInputIdxs: absolute indexes must be strictly increasing"
-    | otherwise = (currentAbsIdx - previousAbsIdx - 1) : go currentAbsIdx restAbsIdxs
-
-mkSeizeActRedeemerFromRelativeInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
-mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outputsStartIdx
-  | any (< 0) relativeInputIdxs = error "mkSeizeActRedeemerFromRelativeInputIdxs: negative relative index"
-  | otherwise =
-      SeizeAct
-        { plgrDirectoryNodeIdx = directoryNodeIdx
-        , plgrInputIdxs = relativeInputIdxs
-        , plgrOutputsStartIdx = outputsStartIdx
-        , plgrLengthInputIdxs = fromIntegral (length relativeInputIdxs)
-        }
-
-mkSeizeActRedeemerFromAbsoluteInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
-mkSeizeActRedeemerFromAbsoluteInputIdxs directoryNodeIdx absoluteInputIdxs =
-  mkSeizeActRedeemerFromRelativeInputIdxs
-    directoryNodeIdx
-    (absoluteToRelativeInputIdxs absoluteInputIdxs)
-
-data PProgrammableLogicGlobalRedeemer (s :: S)
-  = PTransferAct
-      { ptransferProofs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
-      , pmintProofs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
-      }
-  | PSeizeAct
-      { pdirectoryNodeIdx :: Term s (PAsData PInteger)
-      , pinputIdxs :: Term s (PAsData (PBuiltinList (PAsData PInteger)))
-      , poutputsStartIdx :: Term s (PAsData PInteger)
-      , plengthInputIdxs :: Term s (PAsData PInteger)
-      }
-  deriving stock (Generic)
-  deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataStruct PProgrammableLogicGlobalRedeemer)
-
-deriving via
-  DeriveDataPLiftable PProgrammableLogicGlobalRedeemer ProgrammableLogicGlobalRedeemer
-  instance
-    PLiftable PProgrammableLogicGlobalRedeemer
-
--- ============================================================================
--- 13. SeizeAct: value delta
--- ============================================================================
--- Plinth: valueEqualsDeltaCurrencySymbol, dataEqual
 
 -- | Compare two values; require equality everywhere except one CS; return that CS's signed delta.
-pvalueEqualsDeltaCurrencySymbol
+valueEqualsDeltaCurrencySymbol
   :: forall anyOrder anyAmount s
    . Term s PCurrencySymbol
   -> Term s (PAsData (PValue anyOrder anyAmount))
   -> Term s (PAsData (PValue anyOrder anyAmount))
   -> Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
-pvalueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
+valueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
   let innerInputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
       innerInputValue = pto (pto $ pfromData inputUTxOValue)
       innerOutputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
@@ -894,8 +802,8 @@ pvalueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
                         ( pif
                             (pfromData inputValueEntryCS #== progCS)
                             ( pif
-                                (pmapData # punsafeCoerce outputValueEntries #== pmapData # punsafeCoerce inputValueEntries)
-                                (psubtractTokens # pto (pfromData (psndBuiltin # inputValueEntry)) # pto (pfromData @(PMap anyOrder PTokenName PInteger) (psndBuiltin # outputValueEntry)))
+                                (mapData # punsafeCoerce outputValueEntries #== mapData # punsafeCoerce inputValueEntries)
+                                (subtractTokens # pto (pfromData (psndBuiltin # inputValueEntry)) # pto (pfromData @(PMap anyOrder PTokenName PInteger) (psndBuiltin # outputValueEntry)))
                                 perror
                             )
                             (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) (self # inputValueEntries # outputValueEntries # diffAccumulator) perror)
@@ -912,10 +820,9 @@ pvalueEqualsDeltaCurrencySymbol progCS inputUTxOValue outputUTxOValue =
 -- ============================================================================
 -- 14. SeizeAct: processThirdPartyTransfer
 -- ============================================================================
--- Plinth: processThirdPartyTransfer (with checkCorrespondingPair, accumulateProgOutputTokens)
 
 -- | Validate one corresponding input/output pair and accumulate the delta for the seized policy.
-pcheckCorrespondingThirdPartyTransferInputsAndOutputs
+checkCorrespondingThirdPartyTransferInputsAndOutputs
   :: Term s PCurrencySymbol
   -> Term s PCredential
   -> Term _ (PBuiltinList PData :--> PBuiltinList (PAsData PTxInInfo) :--> PBuiltinList (PAsData PTxOut) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBool)
@@ -925,7 +832,7 @@ pcheckCorrespondingThirdPartyTransferInputsAndOutputs
   -> Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
   -> Term s PTxOut
   -> Term s PBool
-pcheckCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCred self remainingRelativeIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator programmableInputResolved =
+checkCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCred self remainingRelativeIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator programmableInputResolved =
   let inputTxOutConstrPair = pasConstr # pforgetData (pdata programmableInputResolved)
       correspondingOutput = phead # programmableOutputs
       outputTxOutConstrPair = pasConstr # pforgetData correspondingOutput
@@ -943,15 +850,15 @@ pcheckCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCr
                      in pif
                           (inputCredentialData #== pforgetData (pdata progLogicCred))
                           ( pif
-                              ( pand'List
+                              ( and'List
                                   [ ptraceInfoIfFalse "corresponding output: address mismatch" $
                                       inputTxOutAddress #== outputTxOutAddress
                                   , ptraceInfoIfFalse "corresponding output: datum/reference script mismatch" $
                                       programmableInputRest #== programmableOutputRest
                                   ]
                               )
-                              ( let delta = pvalueEqualsDeltaCurrencySymbol programmableCS programmableInputValue programmableOutputValue
-                                 in self # remainingRelativeIdxs # remainingInputsAfterIdx # (ptail # programmableOutputs) # (ptokenPairsUnionFast # delta # deltaAccumulator)
+                              ( let delta = valueEqualsDeltaCurrencySymbol programmableCS programmableInputValue programmableOutputValue
+                                 in self # remainingRelativeIdxs # remainingInputsAfterIdx # (ptail # programmableOutputs) # (tokenPairsUnion # delta # deltaAccumulator)
                               )
                               perror
                           )
@@ -977,7 +884,7 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
     checkBalanceInvariant remainingOutputs deltaAccumulatorResult =
       let outputAccumulatorResult = accumulateProgOutputTokens # remainingOutputs
        in pif
-            (ptokenPairsContain # outputAccumulatorResult # deltaAccumulatorResult)
+            (tokenPairsContain # outputAccumulatorResult # deltaAccumulatorResult)
             (pconstant True)
             perror
 
@@ -987,8 +894,8 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
         ( \programmableOutput programmableOutputsRest ->
             pmatch (pfromData programmableOutput) $ \(PTxOut{ptxOut'address = programmableOutputAddress, ptxOut'value = programmableOutputValue}) ->
               pif
-                (paddressCredential programmableOutputAddress #== progLogicCred)
-                (ptokenPairsUnionFast # (ptokensForCurrencySymbol # programmableCS' # pfromData programmableOutputValue) # (self # programmableOutputsRest))
+                (getPaymentCredential programmableOutputAddress #== progLogicCred)
+                (tokenPairsUnion # (tokensForCurrencySymbol # programmableCS' # pfromData programmableOutputValue) # (self # programmableOutputsRest))
                 (self # programmableOutputsRest)
         )
         pnil
@@ -999,11 +906,11 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
       pelimList
         ( \relativeIdxData remainingRelativeIdxs ->
             let relativeIdx = pasInt # relativeIdxData
-             in plet (pdropFast # relativeIdx # remainingInputs) $ \remainingInputsAtIdx ->
+             in plet (dropFast # relativeIdx # remainingInputs) $ \remainingInputsAtIdx ->
                   plet (phead # remainingInputsAtIdx) $ \programmableInput ->
                     let remainingInputsAfterIdx = ptail # remainingInputsAtIdx
                      in plet (ptxInInfoResolved $ pfromData programmableInput) $ \programmableInputResolved ->
-                          pcheckCorrespondingThirdPartyTransferInputsAndOutputs
+                          checkCorrespondingThirdPartyTransferInputsAndOutputs
                             programmableCS'
                             progLogicCred
                             self
@@ -1013,7 +920,7 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
                             deltaAccumulator
                             programmableInputResolved
         )
-        (checkBalanceInvariant programmableOutputs (ptokenPairsUnionFast # deltaAccumulator # mintedTokens))
+        (checkBalanceInvariant programmableOutputs (tokenPairsUnion # deltaAccumulator # mintedTokens))
         relativeInputIdxs
    in
     go # inputIdxs' # inputs # progOutputs # pnil
@@ -1021,10 +928,9 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
 -- ============================================================================
 -- 15. Redeemer map helpers
 -- ============================================================================
--- Plinth: enforceNSpendRedeemers, isSpendingPurpose
 
-penforceNSpendRedeemers :: Term s PInteger -> Term s (PMap 'Unsorted PScriptPurpose PRedeemer) -> Term s PBool
-penforceNSpendRedeemers n rdmrs =
+enforceNSpendRedeemers :: Term s PInteger -> Term s (PMap 'Unsorted PScriptPurpose PRedeemer) -> Term s PBool
+enforceNSpendRedeemers n rdmrs =
   let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
       isNonSpend red = pnot # (pfstBuiltin # (pasConstr # pforgetData red) #== 1)
       isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
@@ -1035,12 +941,11 @@ penforceNSpendRedeemers n rdmrs =
               (constrIdx #== 1)
               (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
               perror
-   in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
+   in isLastSpend # (dropFast # (n - 1) # pto rdmrs)
 
 -- ============================================================================
 -- 16. Base validator (mkProgrammableLogicBase)
 -- ============================================================================
--- Plinth: mkProgrammableLogicBaseValidator
 
 mkProgrammableLogicBase :: Term s (PAsData PCredential :--> PScriptContext :--> PUnit)
 mkProgrammableLogicBase = plam $ \stakeCred ctx ->
@@ -1063,12 +968,11 @@ mkProgrammableLogicBase = plam $ \stakeCred ctx ->
                                          in (pfstBuiltin # withdrawalA) #== stakeCred #|| self # (ptail # withdrawals'')
                                     )
                        in go # (ptail # withdrawals)
-           in pvalidateConditions [ptraceInfoIfFalse "programmable global not invoked" hasCred]
+           in validateConditions [ptraceInfoIfFalse "programmable global not invoked" hasCred]
 
 -- ============================================================================
 -- 17. Global validator (mkProgrammableLogicGlobal)
 -- ============================================================================
--- Plinth: mkProgrammableLogicGlobalValidator
 
 mkProgrammableLogicGlobal :: Term s (PAsData PCurrencySymbol :--> PScriptContext :--> PUnit)
 mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
@@ -1081,7 +985,7 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
 
   PProgrammableLogicGlobalParams{pdirectoryNodeCS, pprogLogicCred} <-
     pmatch $
-      pfindReferenceInputByCS (pfromData protocolParamsCS) referenceInputs
+      findReferenceInputByCS (pfromData protocolParamsCS) referenceInputs
   progLogicCred <- plet $ pfromData pprogLogicCred
 
   ptraceInfo "Extracting invoked scripts"
@@ -1092,14 +996,14 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
       cachedTransferScript0 <- plet $ pfstBuiltin # (phead @PBuiltinList # withdrawalEntries)
       totalProgTokenValue <-
         plet $
-          pvalueFromCred
+          valueFromCred
             progLogicCred
             (pfromData ptxInfo'signatories)
             withdrawalEntries
             (pfromData ptxInfo'inputs)
       totalProgTokenValue_ <-
         plet $
-          pcheckTransferLogicAndGetProgrammableValue
+          checkTransferLogicAndGetProgrammableValue
             (pfromData pdirectoryNodeCS)
             referenceInputs
             (pfromData transferProofs)
@@ -1114,7 +1018,7 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
             totalProgTokenValue_
             ( punsafeCoerce @(PValue 'Sorted 'Positive) $
                 punsafeCoerce @(PValue 'Sorted 'NoGuarantees) totalProgTokenValue_
-                  #<> pcheckMintLogicAndGetProgrammableValue
+                  #<> checkMintLogicAndGetProgrammableValue
                     (pfromData pdirectoryNodeCS)
                     referenceInputs
                     (pfromData mintProofs)
@@ -1122,10 +1026,10 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
                     mintValueNoGuarantees
             )
 
-      pvalidateConditions
-        [ pisRewardingScript (pdata pscriptContext'scriptInfo)
+      validateConditions
+        [ isRewardingScriptInfo (pdata pscriptContext'scriptInfo)
         , ptraceInfoIfFalse "prog tokens escape" $
-            poutputsContainExpectedValueAtCred
+            outputsContainExpectedValueAtCred
               progLogicCred
               (pfromData ptxInfo'outputs)
               expectedProgrammableOutputValue
@@ -1133,8 +1037,8 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
     PSeizeAct{pdirectoryNodeIdx, pinputIdxs, poutputsStartIdx, plengthInputIdxs} -> P.do
       inputIdxsLen <- plet $ pfromData plengthInputIdxs
       let inputIdxsData = punsafeCoerce (pfromData pinputIdxs) :: Term _ (PBuiltinList PData)
-      let remainingOutputs = pdropFast # pfromData poutputsStartIdx # pfromData ptxInfo'outputs
-      let directoryNodeUTxO = phead # (pdropFast # pfromData pdirectoryNodeIdx # referenceInputs)
+      let remainingOutputs = dropFast # pfromData poutputsStartIdx # pfromData ptxInfo'outputs
+      let directoryNodeUTxO = phead # (dropFast # pfromData pdirectoryNodeIdx # referenceInputs)
       PTxOut{ptxOut'value = seizeDirectoryNodeValue, ptxOut'datum = seizeDirectoryNodeDatum} <- pmatch (ptxInInfoResolved $ pfromData directoryNodeUTxO)
       POutputDatum seizeDat' <- pmatch seizeDirectoryNodeDatum
       PDirectorySetNode
@@ -1143,12 +1047,12 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
         } <-
         pmatch (pfromData $ punsafeCoerce @(PAsData PDirectorySetNode) (pto seizeDat'))
       mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
-      seizeMintedTokens <- plet $ ptokensForCurrencySymbol # pfromData directoryNodeDatumFKey # mintValueNoGuarantees
+      seizeMintedTokens <- plet $ tokensForCurrencySymbol # pfromData directoryNodeDatumFKey # mintValueNoGuarantees
       let conditions =
             [ ptraceInfoIfFalse "mini-ledger invariants violated" $ processThirdPartyTransfer directoryNodeDatumFKey progLogicCred (pfromData ptxInfo'inputs) remainingOutputs inputIdxsData seizeMintedTokens
-            , ptraceInfoIfFalse "issuer logic script must be invoked" $ pisScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
-            , ptraceInfoIfFalse "directory node is not valid" $ phasCSH (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
-            , ptraceInfoIfFalse "spending redeemer count mismatch" $ penforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
-            , ptraceInfoIfFalse "input index length mismatch" $ (pbuiltinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
+            , ptraceInfoIfFalse "issuer logic script must be invoked" $ isScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
+            , ptraceInfoIfFalse "directory node is not valid" $ hasCsFirstNonAda (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
+            , ptraceInfoIfFalse "spending redeemer count mismatch" $ enforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
+            , ptraceInfoIfFalse "input index length mismatch" $ (builtinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
             ]
-      pvalidateConditions conditions
+      validateConditions conditions

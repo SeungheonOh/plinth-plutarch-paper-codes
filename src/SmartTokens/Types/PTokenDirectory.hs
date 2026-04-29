@@ -1,11 +1,8 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
@@ -45,9 +42,11 @@ import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (BuiltinByteString, Credential, CurrencySymbol)
 import PlutusTx (Data (B, Constr))
-import PlutusTx qualified
-import PlutusTx.Builtins.Internal qualified as BI
-import PlutusTx.Prelude qualified as PlutusTx
+import PlutusTx.IsData (makeIsDataAsList)
+
+-- ============================================================================
+-- Plutarch helpers (defined before TH splices to avoid staging issues)
+-- ============================================================================
 
 pmkBuiltinList :: [Term s PData] -> Term s (PBuiltinList PData)
 pmkBuiltinList = foldr (\x acc -> pcons # x # acc) pnil
@@ -60,6 +59,22 @@ pheadSingleton = phoistAcyclic $
       (ptraceInfoError "List is empty.")
       xs
 
+pemptyBSData :: Term s (PAsData PByteString)
+pemptyBSData = unsafeEvalTerm NoTracing (punsafeCoerce (pconstant @PData $ B ""))
+
+pemptyCSData :: Term s (PAsData PCurrencySymbol)
+pemptyCSData = unsafeEvalTerm NoTracing (punsafeCoerce (pconstant @PData $ B ""))
+
+ptailNextData :: Term s (PAsData PCurrencySymbol)
+ptailNextData = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+
+ptailBlackListNext :: Term s (PAsData PByteString)
+ptailBlackListNext = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+
+-- ============================================================================
+-- Plinth: BlacklistNode
+-- ============================================================================
+
 data BlacklistNode
   = BlacklistNode
   { blnKey :: BuiltinByteString
@@ -68,16 +83,11 @@ data BlacklistNode
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-instance PlutusTx.ToData BlacklistNode where
-  toBuiltinData BlacklistNode{blnKey, blnNext} = PlutusTx.toBuiltinData [blnKey, blnNext]
+makeIsDataAsList ''BlacklistNode
 
-instance PlutusTx.FromData BlacklistNode where
-  fromBuiltinData builtinData = do
-    xs <- BI.chooseData builtinData Nothing Nothing (Just $ BI.unsafeDataAsList builtinData) Nothing Nothing
-    blnKey_ <- PlutusTx.fromBuiltinData $ BI.head xs
-    let tail_ = BI.tail xs
-    blnNext_ <- PlutusTx.fromBuiltinData $ BI.head tail_
-    PlutusTx.pure PlutusTx.$ BlacklistNode blnKey_ blnNext_
+-- ============================================================================
+-- Plutarch: PBlacklistNode
+-- ============================================================================
 
 data PBlacklistNode (s :: S)
   = PBlacklistNode
@@ -113,9 +123,6 @@ pisInsertedBlacklistNode = phoistAcyclic $
 pemptyBlacklistNode :: Term s (PAsData PBlacklistNode)
 pemptyBlacklistNode = punsafeCoerce $ plistData # pmkBuiltinList [pforgetData pemptyBSData, pforgetData ptailBlackListNext]
 
-ptailBlackListNext :: Term s (PAsData PByteString)
-ptailBlackListNext = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
-
 pisBlacklistTailNode :: Term s (PAsData PBlacklistNode) -> Term s PBool
 pisBlacklistTailNode node =
   pmatch (pfromData node) $ \(PBlacklistNode{pblnNext}) ->
@@ -124,6 +131,10 @@ pisBlacklistTailNode node =
 pisEmptyBlacklistNode :: Term s (PAsData PBlacklistNode) -> Term s PBool
 pisEmptyBlacklistNode node =
   node #== pemptyBlacklistNode
+
+-- ============================================================================
+-- Plinth: DirectorySetNode
+-- ============================================================================
 
 data DirectorySetNode = DirectorySetNode
   { key :: CurrencySymbol
@@ -135,27 +146,11 @@ data DirectorySetNode = DirectorySetNode
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-instance PlutusTx.FromData DirectorySetNode where
-  fromBuiltinData dat = do
-    xs <- BI.chooseData dat Nothing Nothing (Just $ BI.unsafeDataAsList dat) Nothing Nothing
-    directoryNodeCurrSymb <- PlutusTx.fromBuiltinData $ BI.head xs
-    let tailCurrSymb = BI.tail xs
-    nextNodeCurrSymb <- PlutusTx.fromBuiltinData $ BI.head tailCurrSymb
-    let tailCurrSymb1 = BI.tail tailCurrSymb
-    transferLogicCred <- PlutusTx.fromBuiltinData $ BI.head tailCurrSymb1
-    let tailTransferLogic = BI.tail tailCurrSymb1
-    issuerLogicCred <- PlutusTx.fromBuiltinData $ BI.head tailTransferLogic
-    globalStateCS' <- PlutusTx.fromBuiltinData $ BI.head $ BI.tail tailTransferLogic
-    PlutusTx.pure PlutusTx.$ DirectorySetNode directoryNodeCurrSymb nextNodeCurrSymb transferLogicCred issuerLogicCred globalStateCS'
+makeIsDataAsList ''DirectorySetNode
 
-instance PlutusTx.ToData DirectorySetNode where
-  toBuiltinData DirectorySetNode{..} =
-    let directoryNodeCS' = PlutusTx.toBuiltinData key
-        nextNodeCS' = PlutusTx.toBuiltinData next
-        transferLogicCred' = PlutusTx.toBuiltinData transferLogicScript
-        issuerLogicCred' = PlutusTx.toBuiltinData issuerLogicScript
-        globalStateCS' = PlutusTx.toBuiltinData globalStateCS
-     in BI.mkList (BI.mkCons directoryNodeCS' (BI.mkCons nextNodeCS' (BI.mkCons transferLogicCred' (BI.mkCons issuerLogicCred' (BI.mkCons globalStateCS' $ BI.mkNilData BI.unitval)))))
+-- ============================================================================
+-- Plutarch: PDirectorySetNode
+-- ============================================================================
 
 data PDirectorySetNode (s :: S)
   = PDirectorySetNode
@@ -186,22 +181,13 @@ isTailNode node =
 
 emptyNode :: Term s (PAsData PDirectorySetNode)
 emptyNode =
-  let nullTransferLogicCred = pconstant (Constr 0 [PlutusTx.B ""])
-      nullIssuerLogicCred = pconstant (Constr 0 [PlutusTx.B ""])
+  let nullTransferLogicCred = pconstant (Constr 0 [B ""])
+      nullIssuerLogicCred = pconstant (Constr 0 [B ""])
    in punsafeCoerce $ plistData # pmkBuiltinList [pforgetData pemptyBSData, pforgetData ptailNextData, nullTransferLogicCred, nullIssuerLogicCred, pforgetData pemptyBSData]
 
 pisEmptyNode :: Term s (PAsData PDirectorySetNode) -> Term s PBool
 pisEmptyNode node =
   node #== emptyNode
-
-pemptyBSData :: Term s (PAsData PByteString)
-pemptyBSData = unsafeEvalTerm NoTracing (punsafeCoerce (pconstant @PData $ PlutusTx.B ""))
-
-pemptyCSData :: Term s (PAsData PCurrencySymbol)
-pemptyCSData = unsafeEvalTerm NoTracing (punsafeCoerce (pconstant @PData $ PlutusTx.B ""))
-
-ptailNextData :: Term s (PAsData PCurrencySymbol)
-ptailNextData = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
 
 pmkDirectorySetNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PCredential :--> PAsData PCredential :--> PAsData PCurrencySymbol :--> PAsData PDirectorySetNode)
 pmkDirectorySetNode = phoistAcyclic $

@@ -23,15 +23,13 @@ import Plutarch.Script (Script (..))
 import PlutusTx.Code (getPlcNoAnn)
 import UntypedPlutusCore qualified as UPLC
 
-import SmartTokens.Contracts.ProgrammableLogicBase (ProgrammableLogicGlobalRedeemer (..))
 import SmartTokens.Types.PTokenDirectory (DirectorySetNode (..))
+import SmartTokens.Types.ProgrammableLogicGlobal (ProgrammableLogicGlobalRedeemer (..))
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (..))
 
 -- ============================================================================
 -- 1. Plinth infrastructure
 -- ============================================================================
--- Plutarch: type PType, type ClosedTerm, pmapData, ppairDataBuiltinRaw,
---           pjustData, pand'List, pvalidateConditions
 
 compiledCodeToScript :: PlutusTx.CompiledCode a -> Script
 compiledCodeToScript code =
@@ -45,8 +43,6 @@ dataEqual a b = PlutusTx.toBuiltinData a == PlutusTx.toBuiltinData b
 -- ============================================================================
 -- 2. List operations
 -- ============================================================================
--- Plutarch: pnTails, ptails10/20/30, pdropR, pdropFast,
---           pbuiltinListLength, pbuiltinListLengthFast
 
 {-# INLINEABLE dropList #-}
 dropList :: Integer -> [a] -> [a]
@@ -85,10 +81,6 @@ indexList (x : xs) n
 -- ============================================================================
 -- 3. Value helpers
 -- ============================================================================
--- Plutarch: emptyValue, pemptyLedgerValue, pstripAdaH,
---           ptokenPairsUnionFast, pcurrencyPairsUnionFast, pvalueUnionFast,
---           passetQtyInValue, ptokensForCurrencySymbol,
---           pnegateTokens, psubtractTokens, ptokenPairsContain
 
 {-# INLINEABLE valueToSortedList #-}
 valueToSortedList :: Value -> [(CurrencySymbol, [(TokenName, Integer)])]
@@ -206,8 +198,6 @@ tokenPairsContain actAll@((actTn, actQty) : actRest) reqAll@((reqTn, reqQty) : r
 -- ============================================================================
 -- 4. Credential and address helpers
 -- ============================================================================
--- Plutarch: paddressCredential, pscriptContextTxInfo,
---           ptxInInfoResolved, ptxOutDatum, ptxOutValue
 
 {-# INLINEABLE getPaymentCredential #-}
 getPaymentCredential :: Address -> Credential
@@ -220,7 +210,6 @@ getStakingCredential (Address _ mStake) = mStake
 -- ============================================================================
 -- 5. Withdrawal and script info checking
 -- ============================================================================
--- Plutarch: pisScriptInvokedEntries, pisRewardingScript, ptxSignedByPkh
 
 {-# INLINEABLE isScriptInvokedEntries #-}
 isScriptInvokedEntries :: Credential -> [(Credential, Lovelace)] -> Bool
@@ -241,7 +230,6 @@ isSpendingPurpose _ = False
 -- ============================================================================
 -- 6. Value CS checking
 -- ============================================================================
--- Plutarch: phasCSH, phasCSHOrFalse
 
 -- | Check that the first non-Ada policy matches a state-token CS.
 {-# INLINEABLE hasCsFirstNonAda #-}
@@ -259,7 +247,6 @@ hasCsFirstNonAdaOrFalse = hasCsFirstNonAda
 -- ============================================================================
 -- 7. Value aggregation
 -- ============================================================================
--- Plutarch: pvalueFromCred, pvalueToCred
 
 {-# INLINEABLE valueFromCred #-}
 valueFromCred
@@ -305,7 +292,6 @@ valueToCred cred outputs =
 -- ============================================================================
 -- 8. Output containment check
 -- ============================================================================
--- Plutarch: poutputsContainExpectedValueAtCred
 
 {-# INLINEABLE outputsContainExpectedValueAtCred #-}
 outputsContainExpectedValueAtCred :: Credential -> [TxOut] -> Value -> Bool
@@ -344,7 +330,6 @@ outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
 -- ============================================================================
 -- 9. Reference input lookup
 -- ============================================================================
--- Plutarch: pfindReferenceInputByCS
 
 {-# INLINEABLE findReferenceInputByCS #-}
 findReferenceInputByCS :: CurrencySymbol -> [TxInInfo] -> ProgrammableLogicGlobalParams
@@ -372,7 +357,6 @@ decodeDirectoryNode txOut =
 -- ============================================================================
 -- 10. Transfer logic validation
 -- ============================================================================
--- Plutarch: pcheckTransferLogicAndGetProgrammableValue
 
 {-# INLINEABLE checkTransferLogicAndGetProgrammableValue #-}
 checkTransferLogicAndGetProgrammableValue
@@ -422,7 +406,6 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wi
 -- ============================================================================
 -- 11. Mint logic validation
 -- ============================================================================
--- Plutarch: pcheckMintLogicAndGetProgrammableValue
 
 {-# INLINEABLE checkMintLogicAndGetProgrammableValue #-}
 checkMintLogicAndGetProgrammableValue
@@ -475,7 +458,6 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
 -- ============================================================================
 -- 13. SeizeAct: value delta
 -- ============================================================================
--- Plutarch: pvalueEqualsDeltaCurrencySymbol
 
 {-# INLINEABLE valueEqualsDeltaCurrencySymbol #-}
 valueEqualsDeltaCurrencySymbol :: CurrencySymbol -> Value -> Value -> [(TokenName, Integer)]
@@ -518,8 +500,6 @@ valueEqualsDeltaCurrencySymbol progCS inputValue outputValue =
 -- ============================================================================
 -- 14. SeizeAct: processThirdPartyTransfer
 -- ============================================================================
--- Plutarch: pcheckCorrespondingThirdPartyTransferInputsAndOutputs,
---           processThirdPartyTransfer
 
 {-# INLINEABLE processThirdPartyTransfer #-}
 processThirdPartyTransfer
@@ -545,7 +525,6 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
           (TxInInfo _ programmableInputResolved : afterIdx) ->
             checkCorrespondingPair programmableInputResolved restIdxs afterIdx programmableOutputs deltaAccumulator
 
-  -- Plutarch: pcheckCorrespondingThirdPartyTransferInputsAndOutputs
   checkCorrespondingPair :: TxOut -> [Integer] -> [TxInInfo] -> [TxOut] -> [(TokenName, Integer)] -> Bool
   checkCorrespondingPair inputTxOut remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator =
     let inputAddr = txOutAddress inputTxOut
@@ -580,7 +559,6 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
 -- ============================================================================
 -- 15. Redeemer map helpers
 -- ============================================================================
--- Plutarch: penforceNSpendRedeemers
 
 {-# INLINEABLE enforceNSpendRedeemers #-}
 enforceNSpendRedeemers :: Integer -> Map.Map ScriptPurpose Redeemer -> Bool
@@ -599,7 +577,6 @@ enforceNSpendRedeemers n rdmrs =
 -- ============================================================================
 -- 16. Base validator (mkProgrammableLogicBase)
 -- ============================================================================
--- Plutarch: mkProgrammableLogicBase
 
 {-# INLINEABLE mkProgrammableLogicBaseValidator #-}
 mkProgrammableLogicBaseValidator :: BuiltinData -> BuiltinData -> ()
@@ -621,7 +598,6 @@ mkProgrammableLogicBaseValidator stakeCredData ctxData =
 -- ============================================================================
 -- 17. Global validator (mkProgrammableLogicGlobal)
 -- ============================================================================
--- Plutarch: mkProgrammableLogicGlobal
 
 {-# INLINEABLE mkProgrammableLogicGlobalValidator #-}
 mkProgrammableLogicGlobalValidator :: BuiltinData -> BuiltinData -> ()

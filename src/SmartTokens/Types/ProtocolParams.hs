@@ -1,11 +1,13 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
 module SmartTokens.Types.ProtocolParams (
+  -- * Plinth type
   ProgrammableLogicGlobalParams (..),
+
+  -- * Plutarch type
   PProgrammableLogicGlobalParams (..),
 ) where
 
@@ -15,9 +17,11 @@ import Plutarch.Internal.Lift ()
 import Plutarch.LedgerApi.V3 (PCredential, PCurrencySymbol)
 import Plutarch.Prelude
 import PlutusLedgerApi.V3 (Credential, CurrencySymbol)
-import PlutusTx qualified
-import PlutusTx.Builtins.Internal qualified as BI
-import PlutusTx.Prelude qualified as PlutusTxPrelude
+import PlutusTx.IsData (makeIsDataAsList)
+
+-- ============================================================================
+-- Plinth type
+-- ============================================================================
 
 data ProgrammableLogicGlobalParams = ProgrammableLogicGlobalParams
   { directoryNodeCS :: CurrencySymbol
@@ -26,18 +30,11 @@ data ProgrammableLogicGlobalParams = ProgrammableLogicGlobalParams
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-instance PlutusTx.FromData ProgrammableLogicGlobalParams where
-  fromBuiltinData dat = do
-    xs <- BI.chooseData dat Nothing Nothing (Just $ BI.unsafeDataAsList dat) Nothing Nothing
-    directoryNodeCurrSymb <- PlutusTx.fromBuiltinData $ BI.head xs
-    progLogicCred <- PlutusTx.fromBuiltinData $ BI.head $ BI.tail xs
-    PlutusTxPrelude.pure PlutusTxPrelude.$ ProgrammableLogicGlobalParams directoryNodeCurrSymb progLogicCred
+makeIsDataAsList ''ProgrammableLogicGlobalParams
 
-instance PlutusTx.ToData ProgrammableLogicGlobalParams where
-  toBuiltinData ProgrammableLogicGlobalParams{directoryNodeCS, progLogicCred} =
-    let directoryNodeCS' = PlutusTx.toBuiltinData directoryNodeCS
-        progLogicCred' = PlutusTx.toBuiltinData progLogicCred
-     in BI.mkList $ BI.mkCons directoryNodeCS' (BI.mkCons progLogicCred' $ BI.mkNilData BI.unitval)
+-- ============================================================================
+-- Plutarch type
+-- ============================================================================
 
 data PProgrammableLogicGlobalParams (s :: S)
   = PProgrammableLogicGlobalParams

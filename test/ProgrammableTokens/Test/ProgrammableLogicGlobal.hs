@@ -41,14 +41,16 @@ import ProgrammableTokens.Test.ScriptContext.Builder (
   withWithdrawal,
  )
 import SmartTokens.Contracts.ProgrammableLogicBase (
-  ProgrammableLogicGlobalRedeemer (TransferAct),
   mkProgrammableLogicGlobal,
-  mkSeizeActRedeemerFromRelativeInputIdxs,
-  poutputsContainExpectedValueAtCred,
+  outputsContainExpectedValueAtCred,
   pscriptContextTxInfo,
  )
 import SmartTokens.Types.Constants (protocolParamsToken)
 import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
+import SmartTokens.Types.ProgrammableLogicGlobal (
+  ProgrammableLogicGlobalRedeemer (TransferAct),
+  mkSeizeActRedeemerFromRelativeInputIdxs,
+ )
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Test.QuickCheck qualified as QC
 import Test.Tasty (TestTree, testGroup)
@@ -174,7 +176,7 @@ mkOutputsContainScript cred expectedValue =
               punsafeCoerce $
                 pconstant @(PlutarchV3.PValue 'PlutarchV3.Unsorted 'PlutarchV3.NoGuarantees) expectedValue
          in pif
-              ( poutputsContainExpectedValueAtCred
+              ( outputsContainExpectedValueAtCred
                   (pconstant cred)
                   (pfromData $ PlutarchV3.ptxInfo'outputs txInfo)
                   expectedValueTerm
