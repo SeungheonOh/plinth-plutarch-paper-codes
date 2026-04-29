@@ -53,6 +53,9 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Example
+    Hydra.Contracts.Head
+    Hydra.Contracts.HeadPlinth
+    Hydra.Types.HeadState
     SmartTokens.Contracts.ProgrammableLogicBase
     SmartTokens.Contracts.ProgrammableLogicBasePlinth
     SmartTokens.Types.Constants
@@ -78,7 +81,10 @@ executable bench-scripts
     -threaded -rtsopts -Wno-missing-import-lists
     -Wno-missing-export-lists
 
-  other-modules:  ProgrammableTokens.Test.ScriptContext.Builder
+  other-modules:
+    Hydra.Test.Head
+    ProgrammableTokens.Test.ScriptContext.Builder
+
   build-depends:
     , bytestring
     , plinth-plutarch-paper-code
@@ -87,6 +93,10 @@ executable bench-scripts
     , plutus-core
     , plutus-ledger-api
     , plutus-tx
+    , QuickCheck
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
 
 test-suite conformance-tests
   import:         base, project-config
@@ -98,6 +108,7 @@ test-suite conformance-tests
     -Wno-missing-export-lists
 
   other-modules:
+    Hydra.Test.Head
     ProgrammableTokens.Test.ProgrammableLogicGlobal
     ProgrammableTokens.Test.ScriptContext.Builder
 

@@ -7,6 +7,9 @@ module Main where
 import Data.ByteString qualified as BS
 import Data.Either (isRight)
 import Data.Word (Word8)
+import Hydra.Contracts.Head (mkHeadValidator)
+import Hydra.Contracts.HeadPlinth (plinthHeadScript)
+import Hydra.Test.Head qualified as HydraHead
 import Plutarch.Builtin.Integer (pconstantInteger)
 import Plutarch.Evaluate (applyArguments, evalScript)
 import Plutarch.Internal.Evaluate (evalScript')
@@ -30,11 +33,27 @@ import SmartTokens.Types.ProgrammableLogicGlobal
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Text.Printf (printf)
 
+plutarchHeadScript :: Script
+plutarchHeadScript = compileNoTracing mkHeadValidator
+
 main :: IO ()
 main = do
   putStrLn ""
   putStrLn "CIP-143 ProgrammableLogicGlobal -- Execution Cost Comparison"
   putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ runComparison scenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Hydra Head Validator -- Execution Cost Comparison"
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runHeadComparison plutarchHeadScript plinthHeadScript) HydraHead.headBenchScenarios
+  putStrLn (replicate 140 '=')
+
+printHeader :: IO ()
+printHeader = do
   printf
     "%-40s | %-12s %-12s %-4s | %-12s %-12s %-4s | %-10s %-10s\n"
     ("Scenario" :: String)
@@ -59,10 +78,6 @@ main = do
     ("ratio" :: String)
   putStrLn (replicate 140 '-')
 
-  mapM_ runComparison scenarios
-
-  putStrLn (replicate 140 '=')
-
 evalWith :: Script -> ScriptContext -> (Bool, String, String)
 evalWith script ctx =
   let applied = applyArguments script [PlutusTx.toData protocolParamsCS, PlutusTx.toData ctx]
@@ -79,6 +94,23 @@ runComparison :: (String, ScriptContext) -> IO ()
 runComparison (name, ctx) = do
   let (okP, cpuP, memP) = evalWith plutarchScript ctx
       (okT, cpuT, memT) = evalWith plinthScript ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+evalHeadWith :: Script -> ScriptContext -> (Bool, String, String)
+evalHeadWith script ctx =
+  let applied = applyArguments script [PlutusTx.toData ctx]
+      (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
+      ok = isRight res
+   in (ok, show cpu, show mem)
+
+runHeadComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
+runHeadComparison plutarchS plinthS (name, ctx) = do
+  let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
+      (okT, cpuT, memT) = evalHeadWith plinthS ctx
       statusP = if okP then "OK" else "FAIL" :: String
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
