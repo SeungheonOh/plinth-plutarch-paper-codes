@@ -232,16 +232,39 @@ pad n s = s ++ replicate (max 0 (n - length s)) ' '
 rpad :: Int -> String -> String
 rpad n s = replicate (max 0 (n - length s)) ' ' ++ s
 
-main :: IO ()
-main = do
-  let plutarchPath = "src/SmartTokens/Contracts/ProgrammableLogicBase.hs"
-      plinthPath = "src/SmartTokens/Contracts/ProgrammableLogicBasePlinth.hs"
+data ScriptPair = ScriptPair
+  { spName :: String
+  , spPlutarchPath :: FilePath
+  , spPlinthPath :: FilePath
+  , spTypesPath :: Maybe FilePath
+  }
 
-  pm <- analyzeFile plutarchPath
-  tm <- analyzeFile plinthPath
+allScriptPairs :: [ScriptPair]
+allScriptPairs =
+  [ ScriptPair
+      "CIP-143 ProgrammableLogicBase"
+      "src/SmartTokens/Contracts/ProgrammableLogicBase.hs"
+      "src/SmartTokens/Contracts/ProgrammableLogicBasePlinth.hs"
+      (Just "src/SmartTokens/Types/ProgrammableLogicGlobal.hs")
+  , ScriptPair
+      "Hydra Head Validator"
+      "src/Hydra/Contracts/Head.hs"
+      "src/Hydra/Contracts/HeadPlinth.hs"
+      (Just "src/Hydra/Types/HeadState.hs")
+  , ScriptPair
+      "Constitution Sorted Validator"
+      "src/Constitution/Contracts/ConstitutionSorted.hs"
+      "src/Constitution/Contracts/ConstitutionSortedPlinth.hs"
+      (Just "src/Constitution/Types/ConstitutionConfig.hs")
+  ]
+
+printComparison :: ScriptPair -> IO ()
+printComparison ScriptPair{..} = do
+  pm <- analyzeFile spPlutarchPath
+  tm <- analyzeFile spPlinthPath
 
   putStrLn ""
-  putStrLn "Code Size Comparison: ProgrammableLogicBase (via haskell-src-exts)"
+  putStrLn $ "Code Size Comparison: " ++ spName
   putStrLn (replicate 105 '=')
   printf
     "  %-24s | %8s %6s | %8s %6s | %8s\n"
@@ -293,9 +316,70 @@ main = do
     totalRatio
 
   putStrLn (replicate 105 '=')
-  putStrLn ""
   printf
     "  Top-level bindings:  Plutarch = %d,  Plinth = %d\n"
     (fmTopBindings pm)
     (fmTopBindings tm)
+
+  case spTypesPath of
+    Just typesPath -> do
+      typesMetrics <- analyzeFile typesPath
+      printf
+        "  Shared types module:  %s  (%d lines, %d top-level bindings)\n"
+        (takeFileName typesPath)
+        (fmTotalLines typesMetrics)
+        (fmTopBindings typesMetrics)
+    Nothing -> pure ()
+
   putStrLn ""
+
+printSummary :: [(String, FileMetrics, FileMetrics)] -> IO ()
+printSummary pairs = do
+  putStrLn "Summary: All Scripts"
+  putStrLn (replicate 80 '=')
+  printf
+    "  %-34s | %8s | %8s | %8s\n"
+    ("Script" :: String)
+    ("Plutarch" :: String)
+    ("Plinth" :: String)
+    ("ratio" :: String)
+  putStrLn (replicate 80 '-')
+  mapM_
+    ( \(name, pm, tm) -> do
+        let pTotal = fmTotalLines pm
+            tTotal = fmTotalLines tm
+            ratio = printf "%.2fx" (fromIntegral tTotal / fromIntegral pTotal :: Double) :: String
+        printf
+          "  %-34s | %8d | %8d | %8s\n"
+          name
+          pTotal
+          tTotal
+          ratio
+    )
+    pairs
+  putStrLn (replicate 80 '=')
+  let totalP = sum [fmTotalLines pm | (_, pm, _) <- pairs]
+      totalT = sum [fmTotalLines tm | (_, _, tm) <- pairs]
+      totalRatio = printf "%.2fx" (fromIntegral totalT / fromIntegral totalP :: Double) :: String
+  printf
+    "  %-34s | %8d | %8d | %8s\n"
+    ("TOTAL" :: String)
+    totalP
+    totalT
+    totalRatio
+  putStrLn ""
+
+main :: IO ()
+main = do
+  mapM_ printComparison allScriptPairs
+
+  summaryData <-
+    mapM
+      ( \ScriptPair{..} -> do
+          pm <- analyzeFile spPlutarchPath
+          tm <- analyzeFile spPlinthPath
+          pure (spName, pm, tm)
+      )
+      allScriptPairs
+
+  printSummary summaryData
