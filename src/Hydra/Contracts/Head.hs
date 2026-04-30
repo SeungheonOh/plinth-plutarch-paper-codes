@@ -131,40 +131,13 @@ pmustNotMintOrBurn = phoistAcyclic $ plam $ \txInfo ->
     let mintVal = pto (pto (pfromData $ ptxInfo'mint txI))
      in ptraceIfFalse "U01" (pnull # mintVal)
 
-pmustPreserveValue :: Term s (PTxInfo :--> PAddress :--> PBool)
-pmustPreserveValue = phoistAcyclic $ plam $ \txInfo headAddr ->
+pmustPreserveHeadValue :: Term s (PTxInfo :--> PAddress :--> PBool)
+pmustPreserveHeadValue = phoistAcyclic $ plam $ \txInfo headAddr ->
   pmatch txInfo $ \txI ->
     let outputs = pfromData $ ptxInfo'outputs txI
         firstOut = phead # outputs
      in pmatch (pfromData firstOut) $ \(PTxOut{ptxOut'value = outVal}) ->
           ptraceIfFalse "H4" (pconstant True)
-
--- ============================================================================
--- 4. Hash functions
--- ============================================================================
-
-phashTxOuts :: Term s (PBuiltinList (PAsData PTxOut) :--> PByteString)
-phashTxOuts = phoistAcyclic $ plam $ \outs ->
-  let go = pfix #$ plam $ \self xs ->
-        pelimList
-          (\h t -> pserialiseData # pforgetData h <> self # t)
-          mempty
-          xs
-   in psha2_256 # (go # outs)
-
-pemptyHash :: Term s PByteString
-pemptyHash = psha2_256 # pconstant ""
-
--- ============================================================================
--- 5. ContestationPeriod helpers
--- ============================================================================
-
-paddContestationPeriod :: Term s (PInteger :--> PInteger :--> PInteger)
-paddContestationPeriod = phoistAcyclic $ plam $ \time ms -> time + ms
-
--- ============================================================================
--- 6. Head validator helpers
--- ============================================================================
 
 pfindOwnInput :: Term s (PScriptContext :--> PMaybe PTxInInfo)
 pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
@@ -182,6 +155,29 @@ pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
                 inputs
          in go # txInputs
       _ -> pcon PNothing
+
+phashTxOuts :: Term s (PBuiltinList (PAsData PTxOut) :--> PByteString)
+phashTxOuts = phoistAcyclic $ plam $ \outs ->
+  let go = pfix #$ plam $ \self xs ->
+        pelimList
+          (\h t -> pserialiseData # pforgetData h <> self # t)
+          mempty
+          xs
+   in psha2_256 # (go # outs)
+
+pemptyHash :: Term s PByteString
+pemptyHash = psha2_256 # pconstant ""
+
+-- ============================================================================
+-- 4. ContestationPeriod helpers
+-- ============================================================================
+
+paddContestationPeriod :: Term s (PInteger :--> PInteger :--> PInteger)
+paddContestationPeriod = phoistAcyclic $ plam $ \time ms -> time + ms
+
+-- ============================================================================
+-- 5. Head validator helpers
+-- ============================================================================
 
 pgetHeadAddress :: Term s (PScriptContext :--> PAddress)
 pgetHeadAddress = phoistAcyclic $ plam $ \ctx ->
@@ -206,15 +202,15 @@ pheadOutputDatum = phoistAcyclic $ plam $ \ctx ->
                   )
                   (ptraceInfoError "H11")
 
-pdecodeClosedDatum :: Term s (PScriptContext :--> PClosedDatum)
-pdecodeClosedDatum = phoistAcyclic $ plam $ \ctx ->
+pdecodeHeadOutputClosedDatum :: Term s (PScriptContext :--> PClosedDatum)
+pdecodeHeadOutputClosedDatum = phoistAcyclic $ plam $ \ctx ->
   let datum = pheadOutputDatum # ctx
    in pmatch (pfromData $ punsafeCoerce @(PAsData PState) (pto datum)) $ \case
         PClosed closedAsData -> pfromData closedAsData
         _ -> ptraceInfoError "H3"
 
-pdecodeOpenDatum :: Term s (PScriptContext :--> POpenDatum)
-pdecodeOpenDatum = phoistAcyclic $ plam $ \ctx ->
+pdecodeHeadOutputOpenDatum :: Term s (PScriptContext :--> POpenDatum)
+pdecodeHeadOutputOpenDatum = phoistAcyclic $ plam $ \ctx ->
   let datum = pheadOutputDatum # ctx
    in pmatch (pfromData $ punsafeCoerce @(PAsData PState) (pto datum)) $ \case
         POpen openAsData -> pfromData openAsData
@@ -284,7 +280,7 @@ pmustBeSignedByParticipant = phoistAcyclic $ plam $ \ctx headCS ->
     pelimList (\h t -> pcons # h # (self # t # ys)) ys xs
 
 -- ============================================================================
--- 7. Snapshot signature verification
+-- 6. Snapshot signature verification
 -- ============================================================================
 
 pverifySnapshotSignature
@@ -331,7 +327,7 @@ pverifySnapshotSignature = phoistAcyclic $ plam $ \parties headId version snapsh
    in ptraceIfFalse "H12" (numParties #== numSigs #&& verifyAll # parties # sigs)
 
 -- ============================================================================
--- 8. checkClose
+-- 7. checkClose
 -- ============================================================================
 
 pcheckClose :: Term s (PScriptContext :--> POpenDatum :--> PCloseRedeemer :--> PUnit)
@@ -351,7 +347,7 @@ pcheckClose = phoistAcyclic $ plam $ \ctx openBefore closeRed -> P.do
     , popenVersion = prevVersionD
     } <-
     pmatch openBefore
-  closedOut <- plet $ pdecodeClosedDatum # ctx
+  closedOut <- plet $ pdecodeHeadOutputClosedDatum # ctx
   PClosedDatum
     { pclosedSnapshotNumber = nextSnD
     , pclosedUtxoHash = nextUtxoHashD
@@ -497,7 +493,7 @@ pcheckClose = phoistAcyclic $ plam $ \ctx openBefore closeRed -> P.do
       #&& mustNotChangeParams
 
 -- ============================================================================
--- 9. headIsFinalizedWith (Fanout)
+-- 8. headIsFinalizedWith (Fanout)
 -- ============================================================================
 
 pheadIsFinalizedWith :: Term s (PScriptContext :--> PClosedDatum :--> PInteger :--> PInteger :--> PInteger :--> PUnit)
@@ -552,7 +548,7 @@ pheadIsFinalizedWith = phoistAcyclic $ plam $ \ctx closedDatum numFanout numComm
       #&& afterDeadline
 
 -- ============================================================================
--- 10. Main validator
+-- 9. Main validator
 -- ============================================================================
 
 mkHeadValidator :: Term s (PScriptContext :--> PUnit)
@@ -568,14 +564,14 @@ mkHeadValidator = plam $ \ctx ->
                   POpen openAsData ->
                     let openDatum = pfromData openAsData
                      in pmatch input $ \case
-                          PIncrement{pinput'increment = incD} -> ptraceInfoError "increment-unimplemented"
-                          PDecrement{pinput'decrement = decD} -> ptraceInfoError "decrement-unimplemented"
+                          PIncrement{pinput'increment = _} -> ptraceInfoError "increment-unimplemented"
+                          PDecrement{pinput'decrement = _} -> ptraceInfoError "decrement-unimplemented"
                           PClose{pinput'close = closeD} -> pcheckClose # ctx # openDatum # pfromData closeD
                           _ -> ptraceInfoError "H1"
                   PClosed closedAsData ->
                     let closedDatum = pfromData closedAsData
                      in pmatch input $ \case
-                          PContest{pinput'contest = contestD} -> ptraceInfoError "contest-unimplemented"
+                          PContest{pinput'contest = _} -> ptraceInfoError "contest-unimplemented"
                           PFanout{pfanoutNumberOfFanoutOutputs, pfanoutNumberOfCommitOutputs, pfanoutNumberOfDecommitOutputs} ->
                             pheadIsFinalizedWith # ctx # closedDatum # pfromData pfanoutNumberOfFanoutOutputs # pfromData pfanoutNumberOfCommitOutputs # pfromData pfanoutNumberOfDecommitOutputs
                           _ -> ptraceInfoError "H1"

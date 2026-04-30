@@ -56,51 +56,45 @@ listTail [] = traceError "empty list"
 -- 2. Predicate validation (integers)
 -- ============================================================================
 
-{-# INLINEABLE intPredMeaning #-}
-intPredMeaning :: PredKey -> Integer -> Integer -> Bool
-intPredMeaning MinValue expected actual = expected <= actual
-intPredMeaning MaxValue expected actual = expected >= actual
-intPredMeaning NotEqual expected actual = expected /= actual
-
-{-# INLINEABLE validateIntPred #-}
-validateIntPred :: Integer -> (PredKey, [Integer]) -> Bool
-validateIntPred actual (pk, expectedValues) =
-  listAll (\expected -> intPredMeaning pk expected actual) expectedValues
+{-# INLINEABLE intPredAllExpected #-}
+intPredAllExpected :: PredKey -> Integer -> [Integer] -> Bool
+intPredAllExpected pk actual expectedValues =
+  listAll (\expected -> applyPred pk expected actual) expectedValues
+ where
+  applyPred MinValue expected act = expected <= act
+  applyPred MaxValue expected act = expected >= act
+  applyPred NotEqual expected act = expected /= act
 
 {-# INLINEABLE validateIntPreds #-}
 validateIntPreds :: [(PredKey, [Integer])] -> Integer -> Bool
-validateIntPreds preds actual = listAll (validateIntPred actual) preds
+validateIntPreds preds actual =
+  listAll (\(pk, exps) -> intPredAllExpected pk actual exps) preds
 
 -- ============================================================================
 -- 3. Predicate validation (rationals)
 -- ============================================================================
 
-{-# INLINEABLE ratPredMeaning #-}
-ratPredMeaning :: PredKey -> (Integer, Integer) -> (Integer, Integer) -> Bool
-ratPredMeaning MinValue (en, ed) (an, ad) = en * ad <= an * ed
-ratPredMeaning MaxValue (en, ed) (an, ad) = en * ad >= an * ed
-ratPredMeaning NotEqual (en, ed) (an, ad) = en * ad /= an * ed
-
-{-# INLINEABLE validateRatPred #-}
-validateRatPred :: (Integer, Integer) -> (PredKey, [(Integer, Integer)]) -> Bool
-validateRatPred actual (pk, expectedValues) =
-  listAll (\expected -> ratPredMeaning pk expected actual) expectedValues
+{-# INLINEABLE ratPredAllExpected #-}
+ratPredAllExpected :: PredKey -> Integer -> Integer -> [(Integer, Integer)] -> Bool
+ratPredAllExpected pk actualNum actualDen expectedValues =
+  listAll (\(en, ed) -> applyPred pk (en * actualDen) (actualNum * ed)) expectedValues
+ where
+  applyPred MinValue lhs rhs = lhs <= rhs
+  applyPred MaxValue lhs rhs = lhs >= rhs
+  applyPred NotEqual lhs rhs = lhs /= rhs
 
 {-# INLINEABLE validateRatPreds #-}
-validateRatPreds :: [(PredKey, [(Integer, Integer)])] -> (Integer, Integer) -> Bool
-validateRatPreds preds actual = listAll (validateRatPred actual) preds
-
-{-# INLINEABLE validateRatPredsRaw #-}
-validateRatPredsRaw :: [(PredKey, [(Integer, Integer)])] -> Integer -> Integer -> Bool
-validateRatPredsRaw preds num den = validateRatPreds preds (num, den)
+validateRatPreds :: [(PredKey, [(Integer, Integer)])] -> Integer -> Integer -> Bool
+validateRatPreds preds actualNum actualDen =
+  listAll (\(pk, exps) -> ratPredAllExpected pk actualNum actualDen exps) preds
 
 -- ============================================================================
 -- 4. ParamValue validation
 -- ============================================================================
 
-{-# INLINEABLE validateParamValueData #-}
-validateParamValueData :: BuiltinData -> BuiltinData -> Bool
-validateParamValueData pvData d =
+{-# INLINEABLE validateParamValue #-}
+validateParamValue :: BuiltinData -> BuiltinData -> Bool
+validateParamValue pvData d =
   let pv :: ParamValue
       pv = unsafeFromBuiltinData pvData
    in case pv of
@@ -108,13 +102,13 @@ validateParamValueData pvData d =
           validateIntPreds preds (unsafeFromBuiltinData d)
         ParamRational preds ->
           let actualList = unsafeFromBuiltinData @[Integer] d
-           in validateRatPredsRaw preds (listHead actualList) (listHead (listTail actualList))
+           in validateRatPreds preds (listHead actualList) (listHead (listTail actualList))
         ParamList paramValues ->
           validateParamValues paramValues (unsafeFromBuiltinData d)
          where
           validateParamValues :: [ParamValue] -> [BuiltinData] -> Bool
           validateParamValues (pv' : pvs) (dd : ds) =
-            validateParamValueData (toBuiltinData pv') dd && validateParamValues pvs ds
+            validateParamValue (toBuiltinData pv') dd && validateParamValues pvs ds
           validateParamValues [] ds = isNullList ds
           validateParamValues _ [] = False
         ParamAny -> True
@@ -132,7 +126,7 @@ runRules ((expectedPid, paramValueData) : cfgRest) cparams@((actualPidData, actu
   let actualPid = Builtins.unsafeDataAsI actualPidData
    in case compare actualPid expectedPid of
         EQ ->
-          validateParamValueData paramValueData actualValueData
+          validateParamValue paramValueData actualValueData
             && runRules cfgRest cparamsRest
         GT ->
           runRules cfgRest cparams
