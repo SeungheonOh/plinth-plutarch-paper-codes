@@ -2,7 +2,11 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
-module Hydra.Test.Head where
+module Hydra.Test.Head (
+  mkHeadTests,
+  mkHeadConformanceTests,
+  headBenchScenarios,
+) where
 
 import Data.ByteString qualified as BS
 import Data.Either (isRight)
@@ -347,6 +351,145 @@ mkInvalidTransitionCtx =
         )
 
 -- ============================================================================
+-- Contest test context builders
+-- ============================================================================
+
+mkClosedDatumForContest :: ClosedDatum
+mkClosedDatumForContest =
+  ClosedDatum
+    { closedHeadId = headCS
+    , closedParties = partyVkeys
+    , closedContestationPeriod = 200
+    , closedVersion = 1
+    , closedSnapshotNumber = 1
+    , closedUtxoHash = emptyHash
+    , closedAlphaUTxOHash = emptyHash
+    , closedOmegaUTxOHash = emptyHash
+    , closedContesters = []
+    , closedContestationDeadline = POSIXTime 1000
+    }
+
+mkContestCtx :: ScriptContext
+mkContestCtx =
+  let closedDatum = mkClosedDatumForContest
+      state = Closed closedDatum
+      contestRedeemer = Contest $ ContestCurrent{contestCurrentSig = []}
+      contestedOutputDatum =
+        Closed $
+          ClosedDatum
+            { closedHeadId = headCS
+            , closedParties = partyVkeys
+            , closedContestationPeriod = 200
+            , closedVersion = 1
+            , closedSnapshotNumber = 2
+            , closedUtxoHash = emptyHash
+            , closedAlphaUTxOHash = emptyHash
+            , closedOmegaUTxOHash = emptyHash
+            , closedContesters = [signerPkh]
+            , closedContestationDeadline = POSIXTime 1200
+            }
+   in buildScriptContext
+        ( withSpendingScript
+            (PlutusTx.toBuiltinData contestRedeemer)
+            ( withOutRef headUtxoRef
+                <> withAddress headAddress
+                <> withValue (headValueWithTokens [signerPkh])
+                <> withInlineDatum (PlutusTx.toBuiltinData state)
+            )
+            <> withSigner signerPkh
+            <> withOutput
+              ( withTxOutAddress headAddress
+                  <> withTxOutValue (headValueWithTokens [signerPkh])
+                  <> withTxOutInlineDatum (PlutusTx.toBuiltinData contestedOutputDatum)
+              )
+            <> withValidRange
+              ( Interval
+                  (LowerBound (Finite 500) True)
+                  (UpperBound (Finite 900) True)
+              )
+        )
+
+mkContestNotNewerCtx :: ScriptContext
+mkContestNotNewerCtx =
+  let closedDatum = mkClosedDatumForContest
+      state = Closed closedDatum
+      contestRedeemer = Contest $ ContestCurrent{contestCurrentSig = []}
+      contestedOutputDatum =
+        Closed $
+          ClosedDatum
+            { closedHeadId = headCS
+            , closedParties = partyVkeys
+            , closedContestationPeriod = 200
+            , closedVersion = 1
+            , closedSnapshotNumber = 1
+            , closedUtxoHash = emptyHash
+            , closedAlphaUTxOHash = emptyHash
+            , closedOmegaUTxOHash = emptyHash
+            , closedContesters = [signerPkh]
+            , closedContestationDeadline = POSIXTime 1200
+            }
+   in buildScriptContext
+        ( withSpendingScript
+            (PlutusTx.toBuiltinData contestRedeemer)
+            ( withOutRef headUtxoRef
+                <> withAddress headAddress
+                <> withValue (headValueWithTokens [signerPkh])
+                <> withInlineDatum (PlutusTx.toBuiltinData state)
+            )
+            <> withSigner signerPkh
+            <> withOutput
+              ( withTxOutAddress headAddress
+                  <> withTxOutValue (headValueWithTokens [signerPkh])
+                  <> withTxOutInlineDatum (PlutusTx.toBuiltinData contestedOutputDatum)
+              )
+            <> withValidRange
+              ( Interval
+                  (LowerBound (Finite 500) True)
+                  (UpperBound (Finite 900) True)
+              )
+        )
+
+mkContestAfterDeadlineCtx :: ScriptContext
+mkContestAfterDeadlineCtx =
+  let closedDatum = mkClosedDatumForContest
+      state = Closed closedDatum
+      contestRedeemer = Contest $ ContestCurrent{contestCurrentSig = []}
+      contestedOutputDatum =
+        Closed $
+          ClosedDatum
+            { closedHeadId = headCS
+            , closedParties = partyVkeys
+            , closedContestationPeriod = 200
+            , closedVersion = 1
+            , closedSnapshotNumber = 2
+            , closedUtxoHash = emptyHash
+            , closedAlphaUTxOHash = emptyHash
+            , closedOmegaUTxOHash = emptyHash
+            , closedContesters = [signerPkh]
+            , closedContestationDeadline = POSIXTime 1200
+            }
+   in buildScriptContext
+        ( withSpendingScript
+            (PlutusTx.toBuiltinData contestRedeemer)
+            ( withOutRef headUtxoRef
+                <> withAddress headAddress
+                <> withValue (headValueWithTokens [signerPkh])
+                <> withInlineDatum (PlutusTx.toBuiltinData state)
+            )
+            <> withSigner signerPkh
+            <> withOutput
+              ( withTxOutAddress headAddress
+                  <> withTxOutValue (headValueWithTokens [signerPkh])
+                  <> withTxOutInlineDatum (PlutusTx.toBuiltinData contestedOutputDatum)
+              )
+            <> withValidRange
+              ( Interval
+                  (LowerBound (Finite 500) True)
+                  (UpperBound (Finite 1100) True)
+              )
+        )
+
+-- ============================================================================
 -- Test runner
 -- ============================================================================
 
@@ -368,8 +511,39 @@ mkHeadTests name script =
         , testCase "unit_fanout_burn_mismatch_rejected" $ assertFails mkFanoutBurnMismatchCtx
         , testCase "unit_close_initial_valid" $ assertSucceeds mkCloseInitialCtx
         , testCase "unit_close_initial_wrong_version_rejected" $ assertFails mkCloseInitialWrongVersionCtx
+        , testCase "unit_contest_no_sigs_rejected" $ assertFails mkContestCtx
+        , testCase "unit_contest_not_newer_rejected" $ assertFails mkContestNotNewerCtx
+        , testCase "unit_contest_after_deadline_rejected" $ assertFails mkContestAfterDeadlineCtx
         , testCase "unit_invalid_transition_rejected" $ assertFails mkInvalidTransitionCtx
         ]
+
+-- ============================================================================
+-- Conformance: both scripts must agree on all scenarios
+-- ============================================================================
+
+mkHeadConformanceTests :: Script -> Script -> TestTree
+mkHeadConformanceTests plutarchScript plinthScript =
+  let allContexts =
+        [ ("fanout_valid", mkFanoutCtx)
+        , ("fanout_hash_mismatch", mkFanoutHashMismatchCtx)
+        , ("fanout_before_deadline", mkFanoutBeforeDeadlineCtx)
+        , ("fanout_burn_mismatch", mkFanoutBurnMismatchCtx)
+        , ("close_initial_valid", mkCloseInitialCtx)
+        , ("close_initial_wrong_version", mkCloseInitialWrongVersionCtx)
+        , ("contest_valid", mkContestCtx)
+        , ("contest_not_newer", mkContestNotNewerCtx)
+        , ("contest_after_deadline", mkContestAfterDeadlineCtx)
+        , ("invalid_transition", mkInvalidTransitionCtx)
+        ]
+      evalWith script ctx =
+        let (res, _, _) = evalScript (applyArguments script [PlutusTx.toData ctx])
+         in isRight res
+      checkConformance (name, ctx) =
+        testCase ("conformance_" ++ name) $
+          assertBool
+            ("Plutarch and Plinth disagree on " ++ name)
+            (evalWith plutarchScript ctx == evalWith plinthScript ctx)
+   in testGroup "Plutarch-Plinth Conformance" (map checkConformance allContexts)
 
 -- ============================================================================
 -- Benchmark scenarios (exported for BenchScripts)
@@ -383,5 +557,8 @@ headBenchScenarios =
   , ("fanout: burn mismatch (reject)", mkFanoutBurnMismatchCtx)
   , ("close initial: valid", mkCloseInitialCtx)
   , ("close initial: wrong version (reject)", mkCloseInitialWrongVersionCtx)
+  , ("contest: no sigs (reject)", mkContestCtx)
+  , ("contest: not newer (reject)", mkContestNotNewerCtx)
+  , ("contest: after deadline (reject)", mkContestAfterDeadlineCtx)
   , ("invalid transition (reject)", mkInvalidTransitionCtx)
   ]

@@ -42,6 +42,7 @@ main =
           "Hydra Head Validator"
           [ HydraHead.mkHeadTests "Plutarch" plutarchHeadScript
           , HydraHead.mkHeadTests "Plinth (PlutusTx)" plinthHeadScript
+          , HydraHead.mkHeadConformanceTests plutarchHeadScript plinthHeadScript
           ]
       , testGroup
           "Constitution Sorted Validator"
