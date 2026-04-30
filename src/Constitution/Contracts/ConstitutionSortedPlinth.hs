@@ -42,6 +42,16 @@ listAll :: (a -> Bool) -> [a] -> Bool
 listAll _ [] = True
 listAll p (x : xs) = p x && listAll p xs
 
+{-# INLINEABLE listHead #-}
+listHead :: [a] -> a
+listHead (x : _) = x
+listHead [] = traceError "empty list"
+
+{-# INLINEABLE listTail #-}
+listTail :: [a] -> [a]
+listTail (_ : xs) = xs
+listTail [] = traceError "empty list"
+
 -- ============================================================================
 -- 2. Predicate validation (integers)
 -- ============================================================================
@@ -80,25 +90,34 @@ validateRatPred actual (pk, expectedValues) =
 validateRatPreds :: [(PredKey, [(Integer, Integer)])] -> (Integer, Integer) -> Bool
 validateRatPreds preds actual = listAll (validateRatPred actual) preds
 
+{-# INLINEABLE validateRatPredsRaw #-}
+validateRatPredsRaw :: [(PredKey, [(Integer, Integer)])] -> Integer -> Integer -> Bool
+validateRatPredsRaw preds num den = validateRatPreds preds (num, den)
+
 -- ============================================================================
 -- 4. ParamValue validation
 -- ============================================================================
 
-{-# INLINEABLE validateParamValue #-}
-validateParamValue :: ParamValue -> BuiltinData -> Bool
-validateParamValue (ParamInteger preds) d =
-  validateIntPreds preds (unsafeFromBuiltinData d)
-validateParamValue (ParamRational preds) d =
-  validateRatPreds preds (unsafeFromBuiltinData d)
-validateParamValue (ParamList paramValues) d =
-  validateParamValues paramValues (unsafeFromBuiltinData d)
- where
-  validateParamValues :: [ParamValue] -> [BuiltinData] -> Bool
-  validateParamValues (pv : pvs) (dd : ds) =
-    validateParamValue pv dd && validateParamValues pvs ds
-  validateParamValues [] ds = isNullList ds
-  validateParamValues _ [] = False
-validateParamValue ParamAny _ = True
+{-# INLINEABLE validateParamValueData #-}
+validateParamValueData :: BuiltinData -> BuiltinData -> Bool
+validateParamValueData pvData d =
+  let pv :: ParamValue
+      pv = unsafeFromBuiltinData pvData
+   in case pv of
+        ParamInteger preds ->
+          validateIntPreds preds (unsafeFromBuiltinData d)
+        ParamRational preds ->
+          let actualList = unsafeFromBuiltinData @[Integer] d
+           in validateRatPredsRaw preds (listHead actualList) (listHead (listTail actualList))
+        ParamList paramValues ->
+          validateParamValues paramValues (unsafeFromBuiltinData d)
+         where
+          validateParamValues :: [ParamValue] -> [BuiltinData] -> Bool
+          validateParamValues (pv' : pvs) (dd : ds) =
+            validateParamValueData (toBuiltinData pv') dd && validateParamValues pvs ds
+          validateParamValues [] ds = isNullList ds
+          validateParamValues _ [] = False
+        ParamAny -> True
 
 -- ============================================================================
 -- 5. Sorted merge-join: runRules
@@ -106,14 +125,14 @@ validateParamValue ParamAny _ = True
 
 {-# INLINEABLE runRules #-}
 runRules
-  :: [(Integer, ParamValue)]
+  :: [(Integer, BuiltinData)]
   -> [(BuiltinData, BuiltinData)]
   -> Bool
-runRules ((expectedPid, paramValue) : cfgRest) cparams@((actualPidData, actualValueData) : cparamsRest) =
+runRules ((expectedPid, paramValueData) : cfgRest) cparams@((actualPidData, actualValueData) : cparamsRest) =
   let actualPid = Builtins.unsafeDataAsI actualPidData
    in case compare actualPid expectedPid of
         EQ ->
-          validateParamValue paramValue actualValueData
+          validateParamValueData paramValueData actualValueData
             && runRules cfgRest cparamsRest
         GT ->
           runRules cfgRest cparams
@@ -156,7 +175,7 @@ governanceActionToChangedParams gaData =
             else traceError "C1"
 
 {-# INLINEABLE withChangedParams #-}
-withChangedParams :: [(Integer, ParamValue)] -> BuiltinData -> Bool
+withChangedParams :: [(Integer, BuiltinData)] -> BuiltinData -> Bool
 withChangedParams config ctxData =
   let siData = scriptContextToScriptInfo ctxData
       ppData = scriptInfoToProposalProcedure siData
@@ -172,7 +191,7 @@ withChangedParams config ctxData =
 {-# INLINEABLE mkConstitutionValidator #-}
 mkConstitutionValidator :: BuiltinData -> BuiltinData -> ()
 mkConstitutionValidator configData ctxData =
-  let config :: [(Integer, ParamValue)]
+  let config :: [(Integer, BuiltinData)]
       config = unsafeFromBuiltinData configData
    in if withChangedParams config ctxData then () else error ()
 

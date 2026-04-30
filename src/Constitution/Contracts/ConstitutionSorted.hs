@@ -137,9 +137,9 @@ pvalidateParamValue =
               )
             ,
               ( constrIdx #== 1
-              , let ratFields = psndBuiltin # (pasConstr # actualValue)
-                    actualNum = pasInt # (phead # ratFields)
-                    actualDen = pasInt # (phead # (ptail # ratFields))
+              , let ratList = pasList # actualValue
+                    actualNum = pasInt # (phead # ratList)
+                    actualDen = pasInt # (phead # (ptail # ratList))
                  in pvalidateRatPreds # (pasList # (phead # fields)) # actualNum # actualDen
               )
             ,
