@@ -13,3 +13,4 @@
 - ignore: {name: Redundant bang pattern}
 - ignore: {name: Use camelCase}
 - ignore: {name: Eta reduce}
+- ignore: {name: Use foldr, within: Crowdfund.Contracts.CrowdfundPlinth}

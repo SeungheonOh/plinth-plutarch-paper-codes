@@ -8,6 +8,9 @@ import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
 import Constitution.Contracts.ConstitutionSortedPlinth (plinthConstitutionScript)
 import Constitution.Test.ConstitutionSorted qualified as ConstitutionSorted
 import Constitution.Types.ConstitutionConfig (ParamValue)
+import Crowdfund.Contracts.Crowdfund (mkCrowdfundValidator)
+import Crowdfund.Contracts.CrowdfundPlinth (plinthCrowdfundScript)
+import Crowdfund.Test.Crowdfund qualified as Crowdfund
 import Data.ByteString qualified as BS
 import Data.Either (isRight)
 import Data.Word (Word8)
@@ -29,6 +32,9 @@ import PlutusLedgerApi.V1.Value (assetClass, assetClassValue)
 import PlutusLedgerApi.V3
 import PlutusTx qualified
 import ProgrammableTokens.Test.ScriptContext.Builder
+import Settings.Contracts.Settings (mkSettingsValidator)
+import Settings.Contracts.SettingsPlinth (plinthSettingsScript)
+import Settings.Test.Settings qualified as Settings
 import SmartTokens.Contracts.ProgrammableLogicBase
 import SmartTokens.Contracts.ProgrammableLogicBasePlinth (plinthProgrammableLogicGlobalScript)
 import SmartTokens.Types.Constants (protocolParamsToken)
@@ -36,12 +42,24 @@ import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
 import SmartTokens.Types.ProgrammableLogicGlobal
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Text.Printf (printf)
+import Vesting.Contracts.Vesting (mkVestingValidator)
+import Vesting.Contracts.VestingPlinth (plinthVestingScript)
+import Vesting.Test.Vesting qualified as Vesting
 
 plutarchHeadScript :: Script
 plutarchHeadScript = compileNoTracing mkHeadValidator
 
 plutarchConstitutionScript :: Script
 plutarchConstitutionScript = compileNoTracing mkConstitutionValidator
+
+plutarchCrowdfundScript :: Script
+plutarchCrowdfundScript = compileNoTracing mkCrowdfundValidator
+
+plutarchSettingsScript :: Script
+plutarchSettingsScript = compileNoTracing mkSettingsValidator
+
+plutarchVestingScript :: Script
+plutarchVestingScript = compileNoTracing mkVestingValidator
 
 main :: IO ()
 main = do
@@ -64,6 +82,27 @@ main = do
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runConstitutionComparison plutarchConstitutionScript plinthConstitutionScript) ConstitutionSorted.constitutionBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Crowdfund Validator -- Execution Cost Comparison"
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runCrowdfundComparison plutarchCrowdfundScript plinthCrowdfundScript) Crowdfund.crowdfundBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Settings Validator -- Execution Cost Comparison"
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runSettingsComparison plutarchSettingsScript plinthSettingsScript) Settings.settingsBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Vesting Validator -- Execution Cost Comparison"
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runVestingComparison plutarchVestingScript plinthVestingScript) Vesting.vestingBenchScenarios
   putStrLn (replicate 140 '=')
 
 printHeader :: IO ()
@@ -140,6 +179,36 @@ runConstitutionComparison plutarchS plinthS (name, config, ctx) = do
 
 runHeadComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runHeadComparison plutarchS plinthS (name, ctx) = do
+  let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
+      (okT, cpuT, memT) = evalHeadWith plinthS ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+runCrowdfundComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
+runCrowdfundComparison plutarchS plinthS (name, ctx) = do
+  let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
+      (okT, cpuT, memT) = evalHeadWith plinthS ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+runSettingsComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
+runSettingsComparison plutarchS plinthS (name, ctx) = do
+  let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
+      (okT, cpuT, memT) = evalHeadWith plinthS ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+runVestingComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
+runVestingComparison plutarchS plinthS (name, ctx) = do
   let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
       (okT, cpuT, memT) = evalHeadWith plinthS ctx
       statusP = if okP then "OK" else "FAIL" :: String

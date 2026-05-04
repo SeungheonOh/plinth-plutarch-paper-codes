@@ -55,16 +55,27 @@ library
     Constitution.Contracts.ConstitutionSorted
     Constitution.Contracts.ConstitutionSortedPlinth
     Constitution.Types.ConstitutionConfig
+    Crowdfund.Contracts.Crowdfund
+    Crowdfund.Contracts.CrowdfundPlinth
+    Crowdfund.Types.CrowdfundState
     Example
     Hydra.Contracts.Head
     Hydra.Contracts.HeadPlinth
     Hydra.Types.HeadState
+    Sample.Sample
+    Sample.SamplePlinth
+    Settings.Contracts.Settings
+    Settings.Contracts.SettingsPlinth
+    Settings.Types.SettingsState
     SmartTokens.Contracts.ProgrammableLogicBase
     SmartTokens.Contracts.ProgrammableLogicBasePlinth
     SmartTokens.Types.Constants
     SmartTokens.Types.ProgrammableLogicGlobal
     SmartTokens.Types.ProtocolParams
     SmartTokens.Types.PTokenDirectory
+    Vesting.Contracts.Vesting
+    Vesting.Contracts.VestingPlinth
+    Vesting.Types.VestingState
 
   build-depends:
     , generics-sop
@@ -86,8 +97,11 @@ executable bench-scripts
 
   other-modules:
     Constitution.Test.ConstitutionSorted
+    Crowdfund.Test.Crowdfund
     Hydra.Test.Head
     ProgrammableTokens.Test.ScriptContext.Builder
+    Settings.Test.Settings
+    Vesting.Test.Vesting
 
   build-depends:
     , bytestring
@@ -113,9 +127,12 @@ test-suite conformance-tests
 
   other-modules:
     Constitution.Test.ConstitutionSorted
+    Crowdfund.Test.Crowdfund
     Hydra.Test.Head
     ProgrammableTokens.Test.ProgrammableLogicGlobal
     ProgrammableTokens.Test.ScriptContext.Builder
+    Settings.Test.Settings
+    Vesting.Test.Vesting
 
   build-depends:
     , bytestring
