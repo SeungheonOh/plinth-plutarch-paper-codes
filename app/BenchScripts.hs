@@ -197,10 +197,20 @@ runCrowdfundComparison plutarchS plinthS (name, ctx) = do
       memR = ratioStr memP memT
   printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
 
+settingsBootUtxoRef :: TxOutRef
+settingsBootUtxoRef = Settings.bootUtxoRef
+
+evalSettingsWith :: Script -> ScriptContext -> (Bool, String, String)
+evalSettingsWith script ctx =
+  let applied = applyArguments script [PlutusTx.toData settingsBootUtxoRef, PlutusTx.toData ctx]
+      (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
+      ok = isRight res
+   in (ok, show cpu, show mem)
+
 runSettingsComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runSettingsComparison plutarchS plinthS (name, ctx) = do
-  let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
-      (okT, cpuT, memT) = evalHeadWith plinthS ctx
+  let (okP, cpuP, memP) = evalSettingsWith plutarchS ctx
+      (okT, cpuT, memT) = evalSettingsWith plinthS ctx
       statusP = if okP then "OK" else "FAIL" :: String
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT

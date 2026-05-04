@@ -5,6 +5,7 @@ module Settings.Test.Settings (
   mkSettingsTests,
   mkSettingsConformanceTests,
   settingsBenchScenarios,
+  bootUtxoRef,
 ) where
 
 import Data.ByteString qualified as BS
@@ -55,6 +56,9 @@ scooper2Pkh = PubKeyHash (bs28 0x06)
 
 settingsUtxoRef :: TxOutRef
 settingsUtxoRef = TxOutRef (TxId (bs28 0xAA)) 0
+
+bootUtxoRef :: TxOutRef
+bootUtxoRef = TxOutRef (TxId (bs28 0xBB)) 0
 
 pubKeyAddress :: PubKeyHash -> Address
 pubKeyAddress pkh = Address (PubKeyCredential pkh) Nothing
@@ -630,16 +634,119 @@ mkSettingsAdminLovelaceChangeValid =
         )
 
 -- ============================================================================
+-- Mint contexts
+-- ============================================================================
+
+settingsMintCS :: CurrencySymbol
+settingsMintCS = CurrencySymbol (bs28 0x50)
+
+settingsMintAddress :: Address
+settingsMintAddress = Address (ScriptCredential (ScriptHash (bs28 0x50))) Nothing
+
+settingsMintValue :: Value
+settingsMintValue = mkTokenValue settingsMintCS (TokenName "settings") 1
+
+mkMintValidCtx :: ScriptContext
+mkMintValidCtx =
+  buildScriptContext
+    ( withMintingScript
+        settingsMintValue
+        (PlutusTx.toBuiltinData ())
+        <> withInput
+          ( withOutRef bootUtxoRef
+              <> withAddress (pubKeyAddress randomPkh)
+              <> withValue (mkAdaValue 5_000_000)
+          )
+        <> withOutput
+          ( withTxOutAddress settingsMintAddress
+              <> withTxOutValue (mkAdaValue 2_000_000 <> settingsMintValue)
+              <> withTxOutInlineDatum (PlutusTx.toBuiltinData mkDefaultDatum)
+          )
+    )
+
+mkMintMissingBootUtxoRejected :: ScriptContext
+mkMintMissingBootUtxoRejected =
+  buildScriptContext
+    ( withMintingScript
+        settingsMintValue
+        (PlutusTx.toBuiltinData ())
+        <> withInput
+          ( withOutRef (TxOutRef (TxId (bs28 0xCC)) 0)
+              <> withAddress (pubKeyAddress randomPkh)
+              <> withValue (mkAdaValue 5_000_000)
+          )
+        <> withOutput
+          ( withTxOutAddress settingsMintAddress
+              <> withTxOutValue (mkAdaValue 2_000_000 <> settingsMintValue)
+              <> withTxOutInlineDatum (PlutusTx.toBuiltinData mkDefaultDatum)
+          )
+    )
+
+mkMintNotPaidToScriptRejected :: ScriptContext
+mkMintNotPaidToScriptRejected =
+  buildScriptContext
+    ( withMintingScript
+        settingsMintValue
+        (PlutusTx.toBuiltinData ())
+        <> withInput
+          ( withOutRef bootUtxoRef
+              <> withAddress (pubKeyAddress randomPkh)
+              <> withValue (mkAdaValue 5_000_000)
+          )
+        <> withOutput
+          ( withTxOutAddress (pubKeyAddress randomPkh)
+              <> withTxOutValue (mkAdaValue 2_000_000 <> settingsMintValue)
+              <> withTxOutInlineDatum (PlutusTx.toBuiltinData mkDefaultDatum)
+          )
+    )
+
+mkMintWrongQuantityRejected :: ScriptContext
+mkMintWrongQuantityRejected =
+  let wrongMintValue = mkTokenValue settingsMintCS (TokenName "settings") 2
+   in buildScriptContext
+        ( withMintingScript
+            wrongMintValue
+            (PlutusTx.toBuiltinData ())
+            <> withInput
+              ( withOutRef bootUtxoRef
+                  <> withAddress (pubKeyAddress randomPkh)
+                  <> withValue (mkAdaValue 5_000_000)
+              )
+            <> withOutput
+              ( withTxOutAddress settingsMintAddress
+                  <> withTxOutValue (mkAdaValue 2_000_000 <> wrongMintValue)
+                  <> withTxOutInlineDatum (PlutusTx.toBuiltinData mkDefaultDatum)
+              )
+        )
+
+mkMintNoInlineDatumRejected :: ScriptContext
+mkMintNoInlineDatumRejected =
+  buildScriptContext
+    ( withMintingScript
+        settingsMintValue
+        (PlutusTx.toBuiltinData ())
+        <> withInput
+          ( withOutRef bootUtxoRef
+              <> withAddress (pubKeyAddress randomPkh)
+              <> withValue (mkAdaValue 5_000_000)
+          )
+        <> withOutput
+          ( withTxOutAddress settingsMintAddress
+              <> withTxOutValue (mkAdaValue 2_000_000 <> settingsMintValue)
+          )
+    )
+
+-- ============================================================================
 -- Test runner
 -- ============================================================================
 
 mkSettingsTests :: String -> Script -> TestTree
 mkSettingsTests name script =
   let eval ctx =
-        let (res, _budget, _logs) = evalScript (applyArguments script [PlutusTx.toData ctx])
+        let (res, _budget, _logs) = evalScript (applyArguments script [PlutusTx.toData bootUtxoRef, PlutusTx.toData ctx])
          in isRight res
       assertSucceeds ctx =
-        let (res, _budget, logs) = evalScript (applyArguments script [PlutusTx.toData ctx])
+        let (res, _budget, logs) = evalScript (applyArguments script [PlutusTx.toData bootUtxoRef, PlutusTx.toData ctx])
          in assertBool ("expected success, got: " ++ show res ++ " logs: " ++ show logs) (isRight res)
       assertFails ctx =
         assertBool "expected script failure" (not (eval ctx))
@@ -700,6 +807,14 @@ mkSettingsTests name script =
             , testCase "after_valid" $ assertSucceeds mkMultisigAfterValid
             , testCase "after_too_early_rejected" $ assertFails mkMultisigAfterTooEarlyRejected
             ]
+        , testGroup
+            "Mint"
+            [ testCase "mint_valid" $ assertSucceeds mkMintValidCtx
+            , testCase "mint_missing_boot_utxo_rejected" $ assertFails mkMintMissingBootUtxoRejected
+            , testCase "mint_not_paid_to_script_rejected" $ assertFails mkMintNotPaidToScriptRejected
+            , testCase "mint_wrong_quantity_rejected" $ assertFails mkMintWrongQuantityRejected
+            , testCase "mint_no_inline_datum_rejected" $ assertFails mkMintNoInlineDatumRejected
+            ]
         ]
 
 -- ============================================================================
@@ -755,9 +870,14 @@ mkSettingsConformanceTests plutarchScript plinthScript =
         , ("multisig_before_expired", mkMultisigBeforeExpiredRejected)
         , ("multisig_after_valid", mkMultisigAfterValid)
         , ("multisig_after_too_early", mkMultisigAfterTooEarlyRejected)
+        , ("mint_valid", mkMintValidCtx)
+        , ("mint_missing_boot_utxo", mkMintMissingBootUtxoRejected)
+        , ("mint_not_paid_to_script", mkMintNotPaidToScriptRejected)
+        , ("mint_wrong_quantity", mkMintWrongQuantityRejected)
+        , ("mint_no_inline_datum", mkMintNoInlineDatumRejected)
         ]
       evalWith script ctx =
-        let (res, _, _) = evalScript (applyArguments script [PlutusTx.toData ctx])
+        let (res, _, _) = evalScript (applyArguments script [PlutusTx.toData bootUtxoRef, PlutusTx.toData ctx])
          in isRight res
       checkConformance (ctxName, ctx) =
         testCase ("conformance_" ++ ctxName) $
@@ -810,4 +930,9 @@ settingsBenchScenarios =
   , ("multisig: before expired (reject)", mkMultisigBeforeExpiredRejected)
   , ("multisig: after valid", mkMultisigAfterValid)
   , ("multisig: after too early (reject)", mkMultisigAfterTooEarlyRejected)
+  , ("mint: valid", mkMintValidCtx)
+  , ("mint: missing boot utxo (reject)", mkMintMissingBootUtxoRejected)
+  , ("mint: not paid to script (reject)", mkMintNotPaidToScriptRejected)
+  , ("mint: wrong quantity (reject)", mkMintWrongQuantityRejected)
+  , ("mint: no inline datum (reject)", mkMintNoInlineDatumRejected)
   ]

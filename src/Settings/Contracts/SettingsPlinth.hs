@@ -21,6 +21,8 @@ module Settings.Contracts.SettingsPlinth (
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
 import PlutusTx qualified
+import PlutusTx.Builtins qualified as Builtins
+import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
 import PlutusTx.Data.AssocMap qualified as DMap
 import PlutusTx.Data.List qualified as DList
@@ -148,6 +150,10 @@ listHeadOutput = DList.head
 valueIsZero :: MintValue -> Bool
 valueIsZero mv = DMap.null (mintValueToMap mv)
 
+{-# INLINEABLE listAnyInput #-}
+listAnyInput :: (TxInInfo -> Bool) -> DList.List TxInInfo -> Bool
+listAnyInput = DList.any
+
 -- ============================================================================
 -- 4. Settings Admin Update
 -- ============================================================================
@@ -230,18 +236,85 @@ settingsValidator inputDatum redeemer ctx =
           TreasuryAdminUpdateD -> checkTreasuryAdminUpdate inputDatum outputDatum tx
 
 -- ============================================================================
--- 7. Entry point and compiled script
+-- 7. Mint validator
+-- ============================================================================
+
+{-# INLINEABLE mintsExactlyOneToken #-}
+mintsExactlyOneToken :: CurrencySymbol -> TokenName -> MintValue -> Bool
+mintsExactlyOneToken expectedCs expectedTn mv =
+  let outerPairs = DMap.toBuiltinList (mintValueToMap mv)
+   in Builtins.matchList
+        outerPairs
+        (const False)
+        ( \first rest ->
+            Builtins.matchList
+              rest
+              ( \_ ->
+                  unsafeFromBuiltinData (BI.fst first)
+                    == expectedCs
+                    && let innerPairs = BI.unsafeDataAsMap (BI.snd first)
+                        in Builtins.matchList
+                             innerPairs
+                             (const False)
+                             ( \tkPair tkRest ->
+                                 Builtins.matchList
+                                   tkRest
+                                   ( \_ ->
+                                       unsafeFromBuiltinData (BI.fst tkPair)
+                                         == expectedTn
+                                         && unsafeFromBuiltinData @Integer (BI.snd tkPair)
+                                         == 1
+                                   )
+                                   (\_ _ -> False)
+                             )
+              )
+              (\_ _ -> False)
+        )
+
+{-# INLINEABLE findSettingsOutput #-}
+findSettingsOutput :: CurrencySymbol -> DList.List TxOut -> Bool
+findSettingsOutput ownPolicyId =
+  DList.any
+    ( \o ->
+        case addressCredential (txOutAddress o) of
+          ScriptCredential sh ->
+            sh
+              == ScriptHash (unCurrencySymbol ownPolicyId)
+              && case txOutDatum o of
+                OutputDatum _ -> True
+                _ -> False
+          _ -> False
+    )
+
+{-# INLINEABLE settingsMintValidator #-}
+settingsMintValidator :: TxOutRef -> CurrencySymbol -> TxInfo -> Bool
+settingsMintValidator bootUtxo ownPolicyId tx =
+  let mintsExactlyOne =
+        mintsExactlyOneToken ownPolicyId (TokenName "settings") (txInfoMint tx)
+      spendsBootUtxo =
+        listAnyInput (\inp -> txInInfoOutRef inp == bootUtxo) (txInfoInputs tx)
+      paysToSettingsScript =
+        findSettingsOutput ownPolicyId (txInfoOutputs tx)
+   in mintsExactlyOne
+        && spendsBootUtxo
+        && paysToSettingsScript
+
+-- ============================================================================
+-- 8. Entry point and compiled script
 -- ============================================================================
 
 {-# INLINEABLE mkSettingsValidator #-}
-mkSettingsValidator :: BuiltinData -> ()
-mkSettingsValidator ctxData =
+mkSettingsValidator :: BuiltinData -> BuiltinData -> ()
+mkSettingsValidator bootUtxoData ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
    in case scriptContextScriptInfo ctx of
         SpendingScript _ (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @SettingsDatumD datumData
               redeemer = unsafeFromBuiltinData @SettingsRedeemerD (getRedeemer (scriptContextRedeemer ctx))
            in if settingsValidator datum redeemer ctx then () else error ()
+        MintingScript ownPolicyId ->
+          let bootUtxo = unsafeFromBuiltinData @TxOutRef bootUtxoData
+           in if settingsMintValidator bootUtxo ownPolicyId (scriptContextTxInfo ctx) then () else error ()
         _ -> error ()
 
 plinthSettingsScript :: Script

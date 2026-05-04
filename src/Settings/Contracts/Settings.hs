@@ -171,6 +171,13 @@ pvalueIsZero = phoistAcyclic $ plam $ \v ->
   let entries = pto (pto v)
    in pelimList (\_ _ -> pconstant False) (pconstant True) entries
 
+plistAnyInput :: Term s ((PAsData PTxInInfo :--> PBool) :--> PBuiltinList (PAsData PTxInInfo) :--> PBool)
+plistAnyInput = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
+  pelimList
+    (\x rest -> pif (pred' # x) (pconstant True) (self # pred' # rest))
+    (pconstant False)
+    xs
+
 -- ============================================================================
 -- 4. Settings Admin Update
 -- ============================================================================
@@ -300,91 +307,83 @@ psettingsValidator = phoistAcyclic $ plam $ \ctx inputDatum redeemer ->
 -- 7. Mint validator
 -- ============================================================================
 
-plistAnyInput :: Term s ((PAsData PTxInInfo :--> PBool) :--> PBuiltinList (PAsData PTxInInfo) :--> PBool)
-plistAnyInput = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
-  pelimList
-    (\x rest -> pif (pred' # x) (pconstant True) (self # pred' # rest))
-    (pconstant False)
-    xs
-
-psettingsMintValidator :: Term s (PTxOutRef :--> PScriptContext :--> PUnit)
-psettingsMintValidator = phoistAcyclic $ plam $ \bootUtxo ctx ->
-  pmatch ctx $ \(PScriptContext{pscriptContext'txInfo, pscriptContext'scriptInfo}) ->
-    pmatch pscriptContext'scriptInfo $ \case
-      PMintingScript ownPolicyId ->
-        let txInfo = pscriptContext'txInfo
-            settingsNftName = pconstant (TokenName "settings")
-            inputs = pfromData $ pmatch txInfo $ \txI -> ptxInfo'inputs txI
-            spendsBootUtxo =
-              plistAnyInput
-                # plam
-                  ( \inp ->
-                      pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
-                        ptxInInfo'outRef #== bootUtxo
-                  )
-                # inputs
-            mintValue = pfromData $ pmatch txInfo $ \txI -> ptxInfo'mint txI
-            mintEntries = pto (pto mintValue)
-            mintsExactlyOne =
-              pelimList
-                ( \first rest ->
-                    pelimList
-                      (\_ _ -> pconstant False)
-                      ( plet (pfromData (pfstBuiltin # first)) $ \cs ->
-                          plet (pto (pfromData (psndBuiltin # first))) $ \toks ->
-                            cs
-                              #== punsafeCoerce @PCurrencySymbol ownPolicyId
-                              #&& pelimList
-                                ( \tk tkRest ->
-                                    pelimList
-                                      (\_ _ -> pconstant False)
-                                      ( pfromData (pfstBuiltin # tk)
-                                          #== settingsNftName
-                                          #&& pfromData (psndBuiltin # tk)
-                                          #== (1 :: Term _ PInteger)
-                                      )
-                                      tkRest
-                                )
-                                (pconstant False)
-                                toks
-                      )
-                      rest
-                )
-                (pconstant False)
-                mintEntries
-            outputs = pfromData $ pmatch txInfo $ \txI -> ptxInfo'outputs txI
-            pcheckSettingsOutput = pfix #$ plam $ \self outs ->
-              pelimList
-                ( \out rest ->
-                    pmatch (pfromData out) $ \(PTxOut{ptxOut'address, ptxOut'datum}) ->
-                      pmatch ptxOut'address $ \(PAddress{paddress'credential}) ->
-                        pmatch paddress'credential $ \case
-                          PScriptCredential sh ->
-                            pif
-                              (pfromData sh #== punsafeCoerce @PScriptHash ownPolicyId)
-                              ( pmatch ptxOut'datum $ \case
-                                  POutputDatum d ->
-                                    plet (punsafeCoerce @(PAsData PSettingsDatum) (pto d)) $ \_ ->
-                                      pconstant True
-                                  _ -> pconstant False
+pmintsExactlyOneToken :: Term s (PCurrencySymbol :--> PTokenName :--> PValue 'Sorted 'NonZero :--> PBool)
+pmintsExactlyOneToken = phoistAcyclic $ plam $ \expectedCs expectedTn mintValue ->
+  let mintEntries = pto (pto mintValue)
+   in pelimList
+        ( \first rest ->
+            pelimList
+              (\_ _ -> pconstant False)
+              ( plet (pfromData (pfstBuiltin # first)) $ \cs ->
+                  plet (pto (pfromData (psndBuiltin # first))) $ \toks ->
+                    cs
+                      #== expectedCs
+                      #&& pelimList
+                        ( \tk tkRest ->
+                            pelimList
+                              (\_ _ -> pconstant False)
+                              ( pfromData (pfstBuiltin # tk)
+                                  #== expectedTn
+                                  #&& pfromData (psndBuiltin # tk)
+                                  #== (1 :: Term _ PInteger)
                               )
-                              (self # rest)
-                          _ -> self # rest
-                )
-                (pconstant False)
-                outs
-         in pcheck $
-              mintsExactlyOne
-                #&& spendsBootUtxo
-                #&& (pcheckSettingsOutput # outputs)
-      _ -> perror
+                              tkRest
+                        )
+                        (pconstant False)
+                        toks
+              )
+              rest
+        )
+        (pconstant False)
+        mintEntries
+
+pfindSettingsOutput :: Term s (PCurrencySymbol :--> PBuiltinList (PAsData PTxOut) :--> PBool)
+pfindSettingsOutput = phoistAcyclic $ pfix #$ plam $ \self ownPolicyId outs ->
+  pelimList
+    ( \out rest ->
+        pmatch (pfromData out) $ \(PTxOut{ptxOut'address, ptxOut'datum}) ->
+          pmatch ptxOut'address $ \(PAddress{paddress'credential}) ->
+            pmatch paddress'credential $ \case
+              PScriptCredential sh ->
+                pif
+                  (pfromData sh #== punsafeCoerce @PScriptHash ownPolicyId)
+                  ( pmatch ptxOut'datum $ \case
+                      POutputDatum d ->
+                        plet (punsafeCoerce @(PAsData PSettingsDatum) (pto d)) $ \_ ->
+                          pconstant True
+                      _ -> pconstant False
+                  )
+                  (self # ownPolicyId # rest)
+              _ -> self # ownPolicyId # rest
+    )
+    (pconstant False)
+    outs
+
+psettingsMintValidator :: Term s (PTxOutRef :--> PCurrencySymbol :--> PTxInfo :--> PUnit)
+psettingsMintValidator = phoistAcyclic $ plam $ \bootUtxo ownPolicyId txInfo ->
+  let mintsExactlyOne =
+        pmintsExactlyOneToken # ownPolicyId # pconstant (TokenName "settings") # pfromData (pmatch txInfo $ \txI -> ptxInfo'mint txI)
+      spendsBootUtxo =
+        plistAnyInput
+          # plam
+            ( \inp ->
+                pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
+                  ptxInInfo'outRef #== bootUtxo
+            )
+          # pfromData (pmatch txInfo $ \txI -> ptxInfo'inputs txI)
+      paysToSettingsScript =
+        pfindSettingsOutput # ownPolicyId # pfromData (pmatch txInfo $ \txI -> ptxInfo'outputs txI)
+   in pcheck $
+        mintsExactlyOne
+          #&& spendsBootUtxo
+          #&& paysToSettingsScript
 
 -- ============================================================================
 -- 8. Entry point
 -- ============================================================================
 
-mkSettingsValidator :: Term s (PScriptContext :--> PUnit)
-mkSettingsValidator = plam $ \ctx ->
+mkSettingsValidator :: Term s (PTxOutRef :--> PScriptContext :--> PUnit)
+mkSettingsValidator = plam $ \bootUtxo ctx ->
   pmatch ctx $ \(PScriptContext{pscriptContext'redeemer, pscriptContext'scriptInfo}) ->
     pmatch pscriptContext'scriptInfo $ \case
       PSpendingScript _ mDatum ->
@@ -394,6 +393,7 @@ mkSettingsValidator = plam $ \ctx ->
                 redeemer = pfromData $ punsafeCoerce @(PAsData PSettingsRedeemer) (pto pscriptContext'redeemer)
              in psettingsValidator # ctx # datum # redeemer
           PDNothing -> perror
-      PMintingScript _ ->
-        ptraceInfoError "mint not supported without boot utxo parameter"
+      PMintingScript ownPolicyId ->
+        pmatch ctx $ \(PScriptContext{pscriptContext'txInfo}) ->
+          psettingsMintValidator # bootUtxo # pfromData ownPolicyId # pscriptContext'txInfo
       _ -> perror
