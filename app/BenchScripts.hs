@@ -8,6 +8,7 @@ import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
 import Constitution.Contracts.ConstitutionSortedPlinth (plinthConstitutionScript)
 import Constitution.Test.ConstitutionSorted qualified as ConstitutionSorted
 import Constitution.Types.ConstitutionConfig (ParamValue)
+import Control.Lens (traverseOf)
 import Crowdfund.Contracts.Crowdfund (mkCrowdfundValidator)
 import Crowdfund.Contracts.CrowdfundPlinth (plinthCrowdfundScript)
 import Crowdfund.Test.Crowdfund qualified as Crowdfund
@@ -23,13 +24,17 @@ import Plutarch.Internal.Evaluate (evalScript')
 import Plutarch.Internal.Term (Config (NoTracing), Script, Term, compile)
 import Plutarch.LedgerApi.V3 qualified as PlutarchV3
 import Plutarch.Prelude (pconstant, perror, pfromData, pif, plam, pmatch)
-import Plutarch.Script (Script)
+import Plutarch.Script (Script (..))
 import Plutarch.Unsafe (punsafeCoerce)
+import PlutusCore qualified as PLC
+import PlutusCore.DeBruijn
 import PlutusCore.Evaluation.Machine.ExBudget (ExBudget (ExBudget))
 import PlutusCore.Evaluation.Machine.ExMemory (ExCPU (ExCPU), ExMemory (ExMemory))
+import PlutusCore.Pretty
 import PlutusLedgerApi.V1 qualified as PV1
 import PlutusLedgerApi.V1.Value (assetClass, assetClassValue)
 import PlutusLedgerApi.V3
+import PlutusPrelude (unsafeFromRight)
 import PlutusTx qualified
 import ProgrammableTokens.Test.ScriptContext.Builder
 import Settings.Contracts.Settings (mkSettingsValidator)
@@ -42,6 +47,7 @@ import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
 import SmartTokens.Types.ProgrammableLogicGlobal
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Text.Printf (printf)
+import UntypedPlutusCore qualified as UPLC
 import Vesting.Contracts.Vesting (mkVestingValidator)
 import Vesting.Contracts.VestingPlinth (plinthVestingScript)
 import Vesting.Test.Vesting qualified as Vesting
@@ -104,6 +110,22 @@ main = do
   printHeader
   mapM_ (runVestingComparison plutarchVestingScript plinthVestingScript) Vesting.vestingBenchScenarios
   putStrLn (replicate 140 '=')
+
+renderScript :: Script -> String
+renderScript = render . prettyReadable . ndb2name . db2ndb . unScript
+
+db2ndb
+  :: UPLC.Program UPLC.DeBruijn UPLC.DefaultUni UPLC.DefaultFun ()
+  -> UPLC.Program UPLC.NamedDeBruijn UPLC.DefaultUni UPLC.DefaultFun ()
+db2ndb = UPLC.programMapNames fakeNameDeBruijn
+
+ndb2name
+  :: UPLC.Program UPLC.NamedDeBruijn UPLC.DefaultUni UPLC.DefaultFun ()
+  -> UPLC.Program UPLC.Name UPLC.DefaultUni UPLC.DefaultFun ()
+ndb2name =
+  unsafeFromRight @PLC.FreeVariableError
+    . PLC.runQuoteT
+    . traverseOf UPLC.progTerm UPLC.unDeBruijnTerm
 
 printHeader :: IO ()
 printHeader = do

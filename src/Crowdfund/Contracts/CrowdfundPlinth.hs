@@ -6,8 +6,6 @@
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fno-specialize #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:conservative-optimisation #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:optimize #-}
 {-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
 
 module Crowdfund.Contracts.CrowdfundPlinth (
@@ -27,14 +25,7 @@ import PlutusTx.Data.List qualified as DList
 import PlutusTx.Prelude
 import UntypedPlutusCore qualified as UPLC
 
-import Crowdfund.Types.CrowdfundState (
-  CrowdfundDatumD (..),
-  cfDeadlineD,
-  cfGoalD,
-  cfRecipientD,
-  cfWalletsD,
-  matchCrowdfundRedeemerD,
- )
+import Crowdfund.Types.CrowdfundState
 
 -- ============================================================================
 -- 1. Infrastructure
@@ -126,25 +117,41 @@ listHead = DList.head
 -- ============================================================================
 
 {-# INLINEABLE checkDonate #-}
-checkDonate :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> DList.List TxOut -> Integer -> Integer -> PubKeyHash -> Bool
-checkDonate datum validRange sigs contractOutputs contractAmount amount donor =
+checkDonate
+  :: PubKeyHash
+  -> Integer
+  -> Integer
+  -> DMap.Map PubKeyHash Integer
+  -> POSIXTimeRange
+  -> DList.List PubKeyHash
+  -> DList.List TxOut
+  -> Integer
+  -> Integer
+  -> PubKeyHash
+  -> Bool
+checkDonate recipient goal deadline wallets validRange sigs contractOutputs contractAmount amount donor =
   listLength contractOutputs
     == 1
     && let contractOutput = listHead contractOutputs
            outputDatum = getOutputDatum contractOutput
-           outputWallets = cfWalletsD outputDatum
-        in mustStartBeforeTimeout validRange (cfDeadlineD datum)
+           CrowdfundDatumD
+             { cfRecipientD = outRecipient
+             , cfGoalD = outGoal
+             , cfDeadlineD = outDeadline
+             , cfWalletsD = outputWallets
+             } = outputDatum
+        in mustStartBeforeTimeout validRange deadline
              && mustBeSignedBy sigs donor
              && getAdaFromOutputs contractOutputs
              == contractAmount
              + amount
-             && cfRecipientD outputDatum
-             == cfRecipientD datum
-             && cfGoalD outputDatum
-             == cfGoalD datum
-             && cfDeadlineD outputDatum
-             == cfDeadlineD datum
-             && toBuiltinData (walletsExcept donor (cfWalletsD datum))
+             && outRecipient
+             == recipient
+             && outGoal
+             == goal
+             && outDeadline
+             == deadline
+             && toBuiltinData (walletsExcept donor wallets)
              == toBuiltinData (walletsExcept donor outputWallets)
              && maybe
                False
@@ -152,7 +159,7 @@ checkDonate datum validRange sigs contractOutputs contractAmount amount donor =
                    maybe
                      (amount == outputWalletAmount)
                      (\previousAmount -> outputWalletAmount == previousAmount + amount)
-                     (DMap.lookup donor (cfWalletsD datum))
+                     (DMap.lookup donor wallets)
                )
                (DMap.lookup donor outputWallets)
 
@@ -161,65 +168,95 @@ checkDonate datum validRange sigs contractOutputs contractAmount amount donor =
 -- ============================================================================
 
 {-# INLINEABLE checkWithdraw #-}
-checkWithdraw :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> Integer -> Bool
-checkWithdraw datum validRange sigs contractAmount =
-  mustBeSignedBy sigs (cfRecipientD datum)
-    && not (mustStartBeforeTimeout validRange (cfDeadlineD datum))
+checkWithdraw
+  :: PubKeyHash
+  -> Integer
+  -> Integer
+  -> POSIXTimeRange
+  -> DList.List PubKeyHash
+  -> Integer
+  -> Bool
+checkWithdraw recipient goal deadline validRange sigs contractAmount =
+  mustBeSignedBy sigs recipient
+    && not (mustStartBeforeTimeout validRange deadline)
     && contractAmount
-    >= cfGoalD datum
+    >= goal
 
 -- ============================================================================
 -- 5. Reclaim
 -- ============================================================================
 
 {-# INLINEABLE checkReclaim #-}
-checkReclaim :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> DList.List TxInInfo -> DList.List TxOut -> Bool
-checkReclaim datum validRange sigs contractInputs contractOutputs =
+checkReclaim
+  :: PubKeyHash
+  -> Integer
+  -> Integer
+  -> DMap.Map PubKeyHash Integer
+  -> POSIXTimeRange
+  -> DList.List PubKeyHash
+  -> DList.List TxInInfo
+  -> DList.List TxOut
+  -> Bool
+checkReclaim recipient goal deadline wallets validRange sigs contractInputs contractOutputs =
   let currentSigner = DList.head sigs
    in maybe
         False
         ( \withdrawAmount ->
-            not (mustStartBeforeTimeout validRange (cfDeadlineD datum))
-              && if mapSize (cfWalletsD datum) > 1
+            not (mustStartBeforeTimeout validRange deadline)
+              && if mapSize wallets > 1
                 then
                   listLength contractOutputs
                     == 1
                     && let contractOutput = listHead contractOutputs
                            outputDatum = getOutputDatum contractOutput
+                           CrowdfundDatumD
+                             { cfRecipientD = outRecipient
+                             , cfGoalD = outGoal
+                             , cfDeadlineD = outDeadline
+                             , cfWalletsD = outputWallets
+                             } = outputDatum
                         in getAdaFromOutputs contractOutputs
                              == getAdaFromInputs contractInputs
                              - withdrawAmount
-                             && cfRecipientD outputDatum
-                             == cfRecipientD datum
-                             && cfGoalD outputDatum
-                             == cfGoalD datum
-                             && cfDeadlineD outputDatum
-                             == cfDeadlineD datum
-                             && toBuiltinData (cfWalletsD outputDatum)
-                             == toBuiltinData (walletsExcept currentSigner (cfWalletsD datum))
+                             && outRecipient
+                             == recipient
+                             && outGoal
+                             == goal
+                             && outDeadline
+                             == deadline
+                             && toBuiltinData outputWallets
+                             == toBuiltinData (walletsExcept currentSigner wallets)
                 else listLength contractOutputs == 0
         )
-        (DMap.lookup currentSigner (cfWalletsD datum))
+        (DMap.lookup currentSigner wallets)
 
 -- ============================================================================
 -- 6. Main validator
 -- ============================================================================
 
 {-# INLINEABLE crowdfundValidator #-}
-crowdfundValidator :: CrowdfundDatumD -> BuiltinData -> TxOutRef -> TxInfo -> Bool
-crowdfundValidator datum redeemerData ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoSignatories = sigs} =
+crowdfundValidator
+  :: PubKeyHash
+  -> Integer
+  -> Integer
+  -> DMap.Map PubKeyHash Integer
+  -> BuiltinData
+  -> TxOutRef
+  -> TxInfo
+  -> Bool
+crowdfundValidator recipient goal deadline wallets redeemerData ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoSignatories = sigs} =
   let ownInput = findOwnInput ownRef inputs
       contractAddress = txOutAddress (txInInfoResolved ownInput)
       contractInputs = getInputsByAddress inputs contractAddress
       contractOutputs = getOutputsByAddress outputs contractAddress
-      contractAmount = sumWallets (cfWalletsD datum)
+      contractAmount = sumWallets wallets
    in contractAmount
         == getAdaFromInputs contractInputs
         && matchCrowdfundRedeemerD
           (unsafeFromBuiltinData redeemerData)
-          (\amount donor -> checkDonate datum validRange sigs contractOutputs contractAmount amount donor)
-          (checkWithdraw datum validRange sigs contractAmount)
-          (checkReclaim datum validRange sigs contractInputs contractOutputs)
+          (\amount donor -> checkDonate recipient goal deadline wallets validRange sigs contractOutputs contractAmount amount donor)
+          (checkWithdraw recipient goal deadline validRange sigs contractAmount)
+          (checkReclaim recipient goal deadline wallets validRange sigs contractInputs contractOutputs)
 
 -- ============================================================================
 -- 7. Entry point and compiled script
@@ -233,7 +270,13 @@ mkCrowdfundValidator ctxData =
    in case scriptInfo of
         SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @CrowdfundDatumD datumData
-           in if crowdfundValidator datum (getRedeemer redeemer) ownRef txInfo then () else error ()
+              CrowdfundDatumD
+                { cfRecipientD = recipient
+                , cfGoalD = goal
+                , cfDeadlineD = deadline
+                , cfWalletsD = wallets
+                } = datum
+           in if crowdfundValidator recipient goal deadline wallets (getRedeemer redeemer) ownRef txInfo then () else error ()
         _ -> error ()
 
 plinthCrowdfundScript :: Script

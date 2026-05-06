@@ -105,6 +105,7 @@ executable bench-scripts
 
   build-depends:
     , bytestring
+    , lens
     , plinth-plutarch-paper-code
     , plutarch
     , plutarch-ledger-api
