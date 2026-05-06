@@ -4,6 +4,8 @@
 
 module Main where
 
+import Codec.Extras.SerialiseViaFlat (SerialiseViaFlat (..))
+import Codec.Serialise (serialise)
 import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
 import Constitution.Contracts.ConstitutionSortedPlinth (plinthConstitutionScript)
 import Constitution.Test.ConstitutionSorted qualified as ConstitutionSorted
@@ -13,6 +15,7 @@ import Crowdfund.Contracts.Crowdfund (mkCrowdfundValidator)
 import Crowdfund.Contracts.CrowdfundPlinth (plinthCrowdfundScript)
 import Crowdfund.Test.Crowdfund qualified as Crowdfund
 import Data.ByteString qualified as BS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isRight)
 import Data.Word (Word8)
 import Hydra.Contracts.Head (mkHeadValidator)
@@ -67,10 +70,21 @@ plutarchSettingsScript = compileNoTracing mkSettingsValidator
 plutarchVestingScript :: Script
 plutarchVestingScript = compileNoTracing mkVestingValidator
 
+scriptSize :: Script -> Int
+scriptSize (Script prog) = fromIntegral $ LBS.length $ serialise $ SerialiseViaFlat $ UPLC.UnrestrictedProgram prog
+
+printSizes :: String -> Script -> Script -> IO ()
+printSizes name plutarchS plinthS = do
+  let pSize = scriptSize plutarchS
+      tSize = scriptSize plinthS
+      ratio = (fromIntegral tSize :: Double) / fromIntegral pSize
+  printf "  Script size: Plutarch = %d bytes, Plinth = %d bytes (%.2fx)\n" pSize tSize ratio
+
 main :: IO ()
 main = do
   putStrLn ""
   putStrLn "CIP-143 ProgrammableLogicGlobal -- Execution Cost Comparison"
+  printSizes "ProgrammableLogicGlobal" plutarchScript plinthScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ runComparison scenarios
@@ -78,6 +92,7 @@ main = do
 
   putStrLn ""
   putStrLn "Hydra Head Validator -- Execution Cost Comparison"
+  printSizes "HeadValidator" plutarchHeadScript plinthHeadScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runHeadComparison plutarchHeadScript plinthHeadScript) HydraHead.headBenchScenarios
@@ -85,6 +100,7 @@ main = do
 
   putStrLn ""
   putStrLn "Constitution Sorted Validator -- Execution Cost Comparison"
+  printSizes "ConstitutionSorted" plutarchConstitutionScript plinthConstitutionScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runConstitutionComparison plutarchConstitutionScript plinthConstitutionScript) ConstitutionSorted.constitutionBenchScenarios
@@ -92,6 +108,7 @@ main = do
 
   putStrLn ""
   putStrLn "Crowdfund Validator -- Execution Cost Comparison"
+  printSizes "Crowdfund" plutarchCrowdfundScript plinthCrowdfundScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runCrowdfundComparison plutarchCrowdfundScript plinthCrowdfundScript) Crowdfund.crowdfundBenchScenarios
@@ -99,6 +116,7 @@ main = do
 
   putStrLn ""
   putStrLn "Settings Validator -- Execution Cost Comparison"
+  printSizes "Settings" plutarchSettingsScript plinthSettingsScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runSettingsComparison plutarchSettingsScript plinthSettingsScript) Settings.settingsBenchScenarios
@@ -106,6 +124,7 @@ main = do
 
   putStrLn ""
   putStrLn "Vesting Validator -- Execution Cost Comparison"
+  printSizes "Vesting" plutarchVestingScript plinthVestingScript
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runVestingComparison plutarchVestingScript plinthVestingScript) Vesting.vestingBenchScenarios

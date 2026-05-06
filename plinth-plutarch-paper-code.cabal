@@ -113,6 +113,7 @@ executable bench-scripts
     , plutus-ledger-api
     , plutus-tx
     , QuickCheck
+    , serialise
     , tasty
     , tasty-hunit
     , tasty-quickcheck

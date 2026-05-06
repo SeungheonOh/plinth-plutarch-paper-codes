@@ -5,3 +5,4 @@ result
 *.dyn_hi
 *.dyn_o
 .direnv/
+.pre-commit-config.yaml
