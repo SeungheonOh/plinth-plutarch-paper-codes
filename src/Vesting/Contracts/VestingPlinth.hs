@@ -5,16 +5,6 @@
 {-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 {-# OPTIONS_GHC -fno-specialize #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:inline-callsite-growth=20 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:inline-constants #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:inline-fix #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-cse-iterations=8 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-simplifier-iterations-pir=40 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-simplifier-iterations-uplc=40 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:optimize #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:relaxed-float-in #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:remove-trace #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:simplifier-evaluate-builtins #-}
 {-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
 
 module Vesting.Contracts.VestingPlinth (
@@ -95,9 +85,9 @@ getAdaFromOutputs = DList.foldl (\acc o -> acc + getLovelaceAmount (txOutValue o
 foldAdaByVkhOutputs :: List TxOut -> PubKeyHash -> Integer
 foldAdaByVkhOutputs outputs vkh =
   DList.foldl
-    ( \acc o ->
-        if credentialMatchesVkh (txOutAddress o) vkh
-          then acc + getLovelaceAmount (txOutValue o)
+    ( \acc (TxOut addr val _ _) ->
+        if credentialMatchesVkh addr vkh
+          then acc + getLovelaceAmount val
           else acc
     )
     0
@@ -107,9 +97,9 @@ foldAdaByVkhOutputs outputs vkh =
 foldAdaByVkhInputs :: List TxInInfo -> PubKeyHash -> Integer
 foldAdaByVkhInputs inputs vkh =
   DList.foldl
-    ( \acc (TxInInfo _ o) ->
-        if credentialMatchesVkh (txOutAddress o) vkh
-          then acc + getLovelaceAmount (txOutValue o)
+    ( \acc (TxInInfo _ (TxOut addr val _ _)) ->
+        if credentialMatchesVkh addr vkh
+          then acc + getLovelaceAmount val
           else acc
     )
     0
@@ -151,16 +141,26 @@ linearVesting startTimestamp duration totalAllocation timestamp
 -- ============================================================================
 
 {-# INLINEABLE vestingValidator #-}
-vestingValidator :: VestingDatum -> VestingRedeemer -> TxOutRef -> TxInfo -> ()
-vestingValidator datum (Release declaredAmount) ownRef TxInfo{txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoFee = fee, txInfoInputs = inputs, txInfoOutputs = outputs} =
+vestingValidator
+  :: PubKeyHash
+  -> Integer
+  -> Integer
+  -> Integer
+  -> BuiltinData
+  -> VestingRedeemer
+  -> TxOutRef
+  -> TxInfo
+  -> ()
+vestingValidator beneficiary startTimestamp duration amount datumData (Release declaredAmount) ownRef TxInfo{txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoFee = fee, txInfoInputs = inputs, txInfoOutputs = outputs} =
   if mustBeSignedBy sigs beneficiary
     && let ownInput = findOwnInput ownRef inputs
            ownResolved = txInInfoResolved ownInput
-           contractAmount = getLovelaceAmount (txOutValue ownResolved)
+           TxOut ownAddress ownValue _ _ = ownResolved
+           contractAmount = getLovelaceAmount ownValue
            txEarliestTime = getEarliestTime validRange
-           released = vdAmount datum - contractAmount
+           released = amount - contractAmount
            releaseAmount =
-             linearVesting (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum) txEarliestTime
+             linearVesting startTimestamp duration amount txEarliestTime
                - released
         in declaredAmount
              == releaseAmount
@@ -169,16 +169,14 @@ vestingValidator datum (Release declaredAmount) ownRef TxInfo{txInfoSignatories 
              + foldAdaByVkhInputs inputs beneficiary
              - getLovelace fee
              && ( (declaredAmount == contractAmount)
-                    || let contractOutputs = getOutputsByAddress outputs (txOutAddress ownResolved)
+                    || let contractOutputs = getOutputsByAddress outputs ownAddress
                         in DList.length contractOutputs
                              == 1
                              && toBuiltinData (getOutputDatum (DList.head contractOutputs))
-                             == toBuiltinData datum
+                             == datumData
                 )
     then ()
     else error ()
- where
-  beneficiary = vdBeneficiary datum
 
 -- ============================================================================
 -- 5. Entry point
@@ -192,8 +190,14 @@ mkVestingValidator ctxData =
    in case scriptInfo of
         SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @VestingDatum datumData
+              VestingDatum
+                { vdBeneficiary = beneficiary
+                , vdStartTimestamp = startTimestamp
+                , vdDuration = duration
+                , vdAmount = amount
+                } = datum
               red = unsafeFromBuiltinData @VestingRedeemer (getRedeemer redeemer)
-           in vestingValidator datum red ownRef txInfo
+           in vestingValidator beneficiary startTimestamp duration amount datumData red ownRef txInfo
         _ -> error ()
 
 plinthVestingScript :: Script
