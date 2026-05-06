@@ -23,6 +23,9 @@ module Vesting.Contracts.VestingPlinth (
 
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
+import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound)
+import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
+
 import PlutusTx qualified
 import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
@@ -47,12 +50,11 @@ compiledCodeToScript code =
 -- ============================================================================
 
 {-# INLINEABLE findOwnInput #-}
-findOwnInput :: ScriptContext -> TxInInfo
-findOwnInput (ScriptContext txInfo _ (SpendingScript ref _)) =
-  case DList.find (\(TxInInfo r _) -> r == ref) (txInfoInputs txInfo) of
+findOwnInput :: TxOutRef -> List TxInInfo -> TxInInfo
+findOwnInput ref inputs =
+  case DList.find (\(TxInInfo r _) -> r == ref) inputs of
     Just x -> x
     Nothing -> traceError "own input not found"
-findOwnInput _ = traceError "not spending"
 
 {-# INLINEABLE getOutputsByAddress #-}
 getOutputsByAddress :: List TxOut -> Address -> List TxOut
@@ -114,26 +116,24 @@ foldAdaByVkhInputs inputs vkh =
     inputs
 
 {-# INLINEABLE mustBeSignedBy #-}
-mustBeSignedBy :: TxInfo -> PubKeyHash -> Bool
-mustBeSignedBy tx pkh = DList.elem pkh (txInfoSignatories tx)
+mustBeSignedBy :: List PubKeyHash -> PubKeyHash -> Bool
+mustBeSignedBy sigs pkh = DList.elem pkh sigs
 
 {-# INLINEABLE getEarliestTime #-}
-getEarliestTime :: TxInfo -> Integer
-getEarliestTime tx =
-  case txInfoValidRange tx of
-    Interval (LowerBound (Finite (POSIXTime t)) _) _ -> t
-    _ -> 0
-
-{-# INLINEABLE getFee #-}
-getFee :: TxInfo -> Integer
-getFee tx = getLovelace (txInfoFee tx)
+getEarliestTime :: POSIXTimeRange -> Integer
+getEarliestTime validRange =
+  matchInterval validRange $ \lb _ub ->
+    matchLowerBound lb $ \ext _ ->
+      matchExtended ext 0 (\(POSIXTime t) -> t) 0
 
 {-# INLINEABLE getOutputDatum #-}
 getOutputDatum :: TxOut -> VestingDatum
 getOutputDatum o =
-  case txOutDatum o of
-    OutputDatum (Datum d) -> unsafeFromBuiltinData d
-    _ -> traceError "no inline datum"
+  matchOutputDatum
+    (txOutDatum o)
+    (traceError "no inline datum")
+    (\_ -> traceError "no inline datum")
+    (\(Datum d) -> unsafeFromBuiltinData d)
 
 -- ============================================================================
 -- 3. Linear vesting formula
@@ -151,33 +151,34 @@ linearVesting startTimestamp duration totalAllocation timestamp
 -- ============================================================================
 
 {-# INLINEABLE vestingValidator #-}
-vestingValidator :: VestingDatum -> VestingRedeemer -> ScriptContext -> Bool
-vestingValidator datum (Release declaredAmount) ctx =
-  let tx = scriptContextTxInfo ctx
-      beneficiary = vdBeneficiary datum
-   in mustBeSignedBy tx beneficiary
-        && let ownInput = findOwnInput ctx
-               ownResolved = txInInfoResolved ownInput
-               contractAmount = getLovelaceAmount (txOutValue ownResolved)
-               txEarliestTime = getEarliestTime tx
-               released = vdAmount datum - contractAmount
-               releaseAmount =
-                 linearVesting (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum) txEarliestTime
-                   - released
-            in declaredAmount
-                 == releaseAmount
-                 && let fee = getFee tx
-                     in foldAdaByVkhOutputs (txInfoOutputs tx) beneficiary
-                          == declaredAmount
-                          + foldAdaByVkhInputs (txInfoInputs tx) beneficiary
-                          - fee
-                          && ( (declaredAmount == contractAmount)
-                                 || let contractOutputs = getOutputsByAddress (txInfoOutputs tx) (txOutAddress ownResolved)
-                                     in DList.length contractOutputs
-                                          == 1
-                                          && toBuiltinData (getOutputDatum (DList.head contractOutputs))
-                                          == toBuiltinData datum
-                             )
+vestingValidator :: VestingDatum -> VestingRedeemer -> TxOutRef -> TxInfo -> ()
+vestingValidator datum (Release declaredAmount) ownRef TxInfo{txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoFee = fee, txInfoInputs = inputs, txInfoOutputs = outputs} =
+  if mustBeSignedBy sigs beneficiary
+    && let ownInput = findOwnInput ownRef inputs
+           ownResolved = txInInfoResolved ownInput
+           contractAmount = getLovelaceAmount (txOutValue ownResolved)
+           txEarliestTime = getEarliestTime validRange
+           released = vdAmount datum - contractAmount
+           releaseAmount =
+             linearVesting (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum) txEarliestTime
+               - released
+        in declaredAmount
+             == releaseAmount
+             && foldAdaByVkhOutputs outputs beneficiary
+             == declaredAmount
+             + foldAdaByVkhInputs inputs beneficiary
+             - getLovelace fee
+             && ( (declaredAmount == contractAmount)
+                    || let contractOutputs = getOutputsByAddress outputs (txOutAddress ownResolved)
+                        in DList.length contractOutputs
+                             == 1
+                             && toBuiltinData (getOutputDatum (DList.head contractOutputs))
+                             == toBuiltinData datum
+                )
+    then ()
+    else error ()
+ where
+  beneficiary = vdBeneficiary datum
 
 -- ============================================================================
 -- 5. Entry point
@@ -187,11 +188,12 @@ vestingValidator datum (Release declaredAmount) ctx =
 mkVestingValidator :: BuiltinData -> ()
 mkVestingValidator ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-   in case scriptContextScriptInfo ctx of
-        SpendingScript _ (Just (Datum datumData)) ->
+      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+   in case scriptInfo of
+        SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @VestingDatum datumData
-              redeemer = unsafeFromBuiltinData @VestingRedeemer (getRedeemer (scriptContextRedeemer ctx))
-           in if vestingValidator datum redeemer ctx then () else error ()
+              red = unsafeFromBuiltinData @VestingRedeemer (getRedeemer redeemer)
+           in vestingValidator datum red ownRef txInfo
         _ -> error ()
 
 plinthVestingScript :: Script

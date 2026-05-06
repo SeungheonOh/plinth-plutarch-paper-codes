@@ -1,7 +1,10 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module Hydra.Types.HeadState where
 
@@ -10,6 +13,7 @@ import Generics.SOP qualified as SOP
 import Plutarch.Internal.Lift ()
 import Plutarch.LedgerApi.V3 (PCurrencySymbol, PPubKeyHash, PTxOutRef)
 import Plutarch.Prelude
+import PlutusLedgerApi.Data.V3 qualified as DV3
 import PlutusLedgerApi.V3 (
   BuiltinByteString,
   CurrencySymbol,
@@ -18,7 +22,8 @@ import PlutusLedgerApi.V3 (
   TxOutRef,
  )
 import PlutusTx qualified
-import PlutusTx.IsData (makeIsDataAsList)
+import PlutusTx.AsData (asData)
+import PlutusTx.Builtins (BuiltinData)
 
 type SnapshotNumber = Integer
 
@@ -39,7 +44,7 @@ data Commit = Commit
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''Commit
+PlutusTx.makeIsDataIndexed ''Commit [('Commit, 0)]
 
 -- ============================================================================
 -- Plinth: OpenDatum
@@ -56,7 +61,7 @@ data OpenDatum = OpenDatum
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''OpenDatum
+PlutusTx.makeIsDataIndexed ''OpenDatum [('OpenDatum, 0)]
 
 -- ============================================================================
 -- Plinth: ClosedDatum
@@ -77,7 +82,7 @@ data ClosedDatum = ClosedDatum
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''ClosedDatum
+PlutusTx.makeIsDataIndexed ''ClosedDatum [('ClosedDatum, 0)]
 
 -- ============================================================================
 -- Plinth: State (datum)
@@ -172,7 +177,7 @@ data IncrementRedeemer = IncrementRedeemer
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''IncrementRedeemer
+PlutusTx.makeIsDataIndexed ''IncrementRedeemer [('IncrementRedeemer, 0)]
 
 -- ============================================================================
 -- Plinth: DecrementRedeemer
@@ -186,7 +191,7 @@ data DecrementRedeemer = DecrementRedeemer
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''DecrementRedeemer
+PlutusTx.makeIsDataIndexed ''DecrementRedeemer [('DecrementRedeemer, 0)]
 
 -- ============================================================================
 -- Plinth: Input (redeemer)
@@ -218,6 +223,141 @@ PlutusTx.makeIsDataIndexed
   ]
 
 -- ============================================================================
+-- Plinth (AsData): OpenDatumD
+-- ============================================================================
+
+$( asData
+     [d|
+       data OpenDatumD = OpenDatumD
+         { openHeadSeedD :: DV3.TxOutRef
+         , openHeadIdD :: DV3.CurrencySymbol
+         , openPartiesD :: [BuiltinByteString]
+         , openContestationPeriodD :: Integer
+         , openVersionD :: Integer
+         , openUtxoHashD :: BuiltinByteString
+         }
+         deriving newtype (PlutusTx.UnsafeFromData, PlutusTx.ToData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): ClosedDatumD
+-- ============================================================================
+
+$( asData
+     [d|
+       data ClosedDatumD = ClosedDatumD
+         { closedHeadIdD :: DV3.CurrencySymbol
+         , closedPartiesD :: [BuiltinByteString]
+         , closedContestationPeriodD :: Integer
+         , closedVersionD :: Integer
+         , closedSnapshotNumberD :: Integer
+         , closedUtxoHashD :: BuiltinByteString
+         , closedAlphaUTxOHashD :: BuiltinByteString
+         , closedOmegaUTxOHashD :: BuiltinByteString
+         , closedContestersD :: [DV3.PubKeyHash]
+         , closedContestationDeadlineD :: Integer
+         }
+         deriving newtype (PlutusTx.UnsafeFromData, PlutusTx.ToData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): StateD
+-- ============================================================================
+
+$( asData
+     [d|
+       data StateD
+         = OpenD BuiltinData
+         | ClosedD BuiltinData
+         | FinalD
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): CloseRedeemerD
+-- ============================================================================
+
+$( asData
+     [d|
+       data CloseRedeemerD
+         = CloseInitialD
+         | CloseAnyD [BuiltinByteString]
+         | CloseUnusedDecD [BuiltinByteString]
+         | CloseUsedDecD [BuiltinByteString] BuiltinByteString
+         | CloseUnusedIncD [BuiltinByteString] BuiltinByteString
+         | CloseUsedIncD [BuiltinByteString] BuiltinByteString
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): ContestRedeemerD
+-- ============================================================================
+
+$( asData
+     [d|
+       data ContestRedeemerD
+         = ContestCurrentD [BuiltinByteString]
+         | ContestUsedDecD [BuiltinByteString] BuiltinByteString
+         | ContestUnusedDecD [BuiltinByteString]
+         | ContestUnusedIncD [BuiltinByteString] BuiltinByteString
+         | ContestUsedIncD [BuiltinByteString]
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): IncrementRedeemerD
+-- ============================================================================
+
+$( asData
+     [d|
+       data IncrementRedeemerD = IncrementRedeemerD
+         { incrementSigD :: [BuiltinByteString]
+         , incrementSnapshotNumberD :: Integer
+         , incrementRefD :: DV3.TxOutRef
+         }
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): DecrementRedeemerD
+-- ============================================================================
+
+$( asData
+     [d|
+       data DecrementRedeemerD = DecrementRedeemerD
+         { decrementSigD :: [BuiltinByteString]
+         , decrementSnapshotNumberD :: Integer
+         , decrementNumberOfDecommitOutputsD :: Integer
+         }
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): InputD
+-- ============================================================================
+
+$( asData
+     [d|
+       data InputD
+         = CollectComD
+         | IncrementD BuiltinData
+         | DecrementD BuiltinData
+         | CloseD BuiltinData
+         | ContestD BuiltinData
+         | AbortD
+         | FanoutD Integer Integer Integer
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
 -- Plutarch: PCommit
 -- ============================================================================
 
@@ -227,10 +367,10 @@ data PCommit (s :: S) = PCommit
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PCommit)
+  deriving (PlutusType) via (DeriveAsDataStruct PCommit)
 
 deriving via
-  DeriveDataPLiftable (PAsData PCommit) Commit
+  DeriveDataPLiftable PCommit Commit
   instance
     PLiftable PCommit
 
@@ -248,10 +388,10 @@ data POpenDatum (s :: S) = POpenDatum
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec POpenDatum)
+  deriving (PlutusType) via (DeriveAsDataStruct POpenDatum)
 
 deriving via
-  DeriveDataPLiftable (PAsData POpenDatum) OpenDatum
+  DeriveDataPLiftable POpenDatum OpenDatum
   instance
     PLiftable POpenDatum
 
@@ -273,10 +413,10 @@ data PClosedDatum (s :: S) = PClosedDatum
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PClosedDatum)
+  deriving (PlutusType) via (DeriveAsDataStruct PClosedDatum)
 
 deriving via
-  DeriveDataPLiftable (PAsData PClosedDatum) ClosedDatum
+  DeriveDataPLiftable PClosedDatum ClosedDatum
   instance
     PLiftable PClosedDatum
 
@@ -372,10 +512,10 @@ data PIncrementRedeemer (s :: S) = PIncrementRedeemer
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PIncrementRedeemer)
+  deriving (PlutusType) via (DeriveAsDataStruct PIncrementRedeemer)
 
 deriving via
-  DeriveDataPLiftable (PAsData PIncrementRedeemer) IncrementRedeemer
+  DeriveDataPLiftable PIncrementRedeemer IncrementRedeemer
   instance
     PLiftable PIncrementRedeemer
 
@@ -390,10 +530,10 @@ data PDecrementRedeemer (s :: S) = PDecrementRedeemer
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PDecrementRedeemer)
+  deriving (PlutusType) via (DeriveAsDataStruct PDecrementRedeemer)
 
 deriving via
-  DeriveDataPLiftable (PAsData PDecrementRedeemer) DecrementRedeemer
+  DeriveDataPLiftable PDecrementRedeemer DecrementRedeemer
   instance
     PLiftable PDecrementRedeemer
 

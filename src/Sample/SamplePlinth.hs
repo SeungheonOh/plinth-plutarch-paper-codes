@@ -33,8 +33,6 @@ sumMaybeIntegers :: List (MaybeData Integer) -> Integer
 sumMaybeIntegers =
   foldList
     ( \acc mx ->
-        case mx of
-          DNothing -> acc
-          DJust n -> acc + n
+        matchMaybeData mx acc (\n -> acc + n)
     )
     0

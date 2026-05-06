@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fno-specialize #-}
@@ -13,14 +15,26 @@ module Crowdfund.Contracts.CrowdfundPlinth (
 ) where
 
 import Plutarch.Script (Script (..))
-import PlutusLedgerApi.V3
+import PlutusLedgerApi.Data.V3
+import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound)
+import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
+
 import PlutusTx qualified
-import PlutusTx.AssocMap qualified as Map
+import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
+import PlutusTx.Data.AssocMap qualified as DMap
+import PlutusTx.Data.List qualified as DList
 import PlutusTx.Prelude
 import UntypedPlutusCore qualified as UPLC
 
-import Crowdfund.Types.CrowdfundState
+import Crowdfund.Types.CrowdfundState (
+  CrowdfundDatumD (..),
+  cfDeadlineD,
+  cfGoalD,
+  cfRecipientD,
+  cfWalletsD,
+  matchCrowdfundRedeemerD,
+ )
 
 -- ============================================================================
 -- 1. Infrastructure
@@ -31,201 +45,181 @@ compiledCodeToScript code =
   let UPLC.Program ann ver body = getPlcNoAnn code
    in Script (UPLC.Program ann ver (UPLC.termMapNames UPLC.unNameDeBruijn body))
 
-{-# INLINEABLE listLength #-}
-listLength :: [a] -> Integer
-listLength [] = 0
-listLength (_ : xs) = 1 + listLength xs
-
-{-# INLINEABLE listHead #-}
-listHead :: [a] -> a
-listHead (x : _) = x
-listHead [] = traceError "empty list"
-
-{-# INLINEABLE listElem #-}
-listElem :: (Eq a) => a -> [a] -> Bool
-listElem _ [] = False
-listElem x (y : ys) = x == y || listElem x ys
-
 -- ============================================================================
 -- 2. Utility functions
 -- ============================================================================
 
 {-# INLINEABLE findOwnInput #-}
-findOwnInput :: ScriptContext -> TxInInfo
-findOwnInput (ScriptContext txInfo _ (SpendingScript ref _)) =
-  case go (txInfoInputs txInfo) of
+findOwnInput :: TxOutRef -> DList.List TxInInfo -> TxInInfo
+findOwnInput ref inputs =
+  case DList.find (\inp -> txInInfoOutRef inp == ref) inputs of
     Just x -> x
     Nothing -> traceError "own input not found"
- where
-  go [] = Nothing
-  go (inp@(TxInInfo r _) : rest) = if r == ref then Just inp else go rest
-findOwnInput _ = traceError "not spending"
 
 {-# INLINEABLE getInputsByAddress #-}
-getInputsByAddress :: [TxInInfo] -> Address -> [TxInInfo]
-getInputsByAddress [] _ = []
-getInputsByAddress (inp@(TxInInfo _ o) : rest) addr
-  | txOutAddress o == addr = inp : getInputsByAddress rest addr
-  | otherwise = getInputsByAddress rest addr
+getInputsByAddress :: DList.List TxInInfo -> Address -> DList.List TxInInfo
+getInputsByAddress inputs addr =
+  DList.filter (\inp -> txOutAddress (txInInfoResolved inp) == addr) inputs
 
 {-# INLINEABLE getOutputsByAddress #-}
-getOutputsByAddress :: [TxOut] -> Address -> [TxOut]
-getOutputsByAddress [] _ = []
-getOutputsByAddress (o : rest) addr
-  | txOutAddress o == addr = o : getOutputsByAddress rest addr
-  | otherwise = getOutputsByAddress rest addr
+getOutputsByAddress :: DList.List TxOut -> Address -> DList.List TxOut
+getOutputsByAddress outputs addr =
+  DList.filter (\o -> txOutAddress o == addr) outputs
 
 {-# INLINEABLE getLovelaceAmount #-}
 getLovelaceAmount :: Value -> Integer
-getLovelaceAmount v =
-  case Map.lookup (CurrencySymbol "") (getValue v) of
-    Nothing -> 0
-    Just tokenMap ->
-      case Map.lookup (TokenName "") tokenMap of
-        Nothing -> 0
-        Just amt -> amt
+getLovelaceAmount (Value m) =
+  let outerPairs = BI.unsafeDataAsMap (toBuiltinData m)
+      innerPairs = BI.unsafeDataAsMap (BI.snd (BI.head outerPairs))
+   in BI.unsafeDataAsI (BI.snd (BI.head innerPairs))
 
 {-# INLINEABLE getAdaFromInputs #-}
-getAdaFromInputs :: [TxInInfo] -> Integer
-getAdaFromInputs [] = 0
-getAdaFromInputs (TxInInfo _ o : rest) = getLovelaceAmount (txOutValue o) + getAdaFromInputs rest
+getAdaFromInputs :: DList.List TxInInfo -> Integer
+getAdaFromInputs = DList.foldl (\acc inp -> acc + getLovelaceAmount (txOutValue (txInInfoResolved inp))) 0
 
 {-# INLINEABLE getAdaFromOutputs #-}
-getAdaFromOutputs :: [TxOut] -> Integer
-getAdaFromOutputs [] = 0
-getAdaFromOutputs (o : rest) = getLovelaceAmount (txOutValue o) + getAdaFromOutputs rest
+getAdaFromOutputs :: DList.List TxOut -> Integer
+getAdaFromOutputs = DList.foldl (\acc o -> acc + getLovelaceAmount (txOutValue o)) 0
 
 {-# INLINEABLE mustStartBeforeTimeout #-}
-mustStartBeforeTimeout :: POSIXTimeRange -> POSIXTime -> Bool
+mustStartBeforeTimeout :: POSIXTimeRange -> Integer -> Bool
 mustStartBeforeTimeout range deadline =
-  case ivFrom range of
-    LowerBound (Finite t) _ -> t < deadline
-    _ -> False
+  matchInterval range $ \lb _ub ->
+    matchLowerBound lb $ \ext _ ->
+      matchExtended ext False (\(POSIXTime t) -> t < deadline) False
 
 {-# INLINEABLE mustBeSignedBy #-}
-mustBeSignedBy :: TxInfo -> PubKeyHash -> Bool
-mustBeSignedBy tx pkh = listElem pkh (txInfoSignatories tx)
+mustBeSignedBy :: DList.List PubKeyHash -> PubKeyHash -> Bool
+mustBeSignedBy sigs pkh = DList.elem pkh sigs
 
 {-# INLINEABLE sumWallets #-}
-sumWallets :: Map.Map PubKeyHash Integer -> Integer
-sumWallets m = go (Map.toList m)
- where
-  go [] = 0
-  go ((_, v) : rest) = v + go rest
+sumWallets :: DMap.Map PubKeyHash Integer -> Integer
+sumWallets m = DMap.foldr (\v acc -> v + acc) 0 m
 
 {-# INLINEABLE mapSize #-}
-mapSize :: Map.Map PubKeyHash Integer -> Integer
-mapSize m = listLength (Map.toList m)
+mapSize :: DMap.Map PubKeyHash Integer -> Integer
+mapSize m = DList.length (DMap.keys m)
 
 {-# INLINEABLE walletsExcept #-}
-walletsExcept :: PubKeyHash -> [(PubKeyHash, Integer)] -> [(PubKeyHash, Integer)]
-walletsExcept _ [] = []
-walletsExcept donor ((k, v) : rest)
-  | k == donor = walletsExcept donor rest
-  | otherwise = (k, v) : walletsExcept donor rest
+walletsExcept :: PubKeyHash -> DMap.Map PubKeyHash Integer -> DMap.Map PubKeyHash Integer
+walletsExcept donor m = DMap.delete donor m
 
 {-# INLINEABLE getOutputDatum #-}
-getOutputDatum :: TxOut -> CrowdfundDatum
+getOutputDatum :: TxOut -> CrowdfundDatumD
 getOutputDatum o =
-  case txOutDatum o of
-    OutputDatum (Datum d) ->
-      unsafeFromBuiltinData d
-    _ -> traceError "no inline datum"
+  matchOutputDatum
+    (txOutDatum o)
+    (traceError "no inline datum")
+    (\_ -> traceError "no inline datum")
+    (\(Datum d) -> unsafeFromBuiltinData d)
+
+{-# INLINEABLE listLength #-}
+listLength :: DList.List a -> Integer
+listLength = DList.length
+
+{-# INLINEABLE listHead #-}
+listHead :: (UnsafeFromData a) => DList.List a -> a
+listHead = DList.head
 
 -- ============================================================================
 -- 3. Donate
 -- ============================================================================
 
 {-# INLINEABLE checkDonate #-}
-checkDonate :: CrowdfundDatum -> TxInfo -> [TxOut] -> Integer -> Integer -> PubKeyHash -> Bool
-checkDonate datum tx contractOutputs contractAmount amount donor =
+checkDonate :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> DList.List TxOut -> Integer -> Integer -> PubKeyHash -> Bool
+checkDonate datum validRange sigs contractOutputs contractAmount amount donor =
   listLength contractOutputs
     == 1
     && let contractOutput = listHead contractOutputs
            outputDatum = getOutputDatum contractOutput
-           outputWallets = cfWallets outputDatum
-        in mustStartBeforeTimeout (txInfoValidRange tx) (cfDeadline datum)
-             && mustBeSignedBy tx donor
+           outputWallets = cfWalletsD outputDatum
+        in mustStartBeforeTimeout validRange (cfDeadlineD datum)
+             && mustBeSignedBy sigs donor
              && getAdaFromOutputs contractOutputs
              == contractAmount
              + amount
-             && cfRecipient outputDatum
-             == cfRecipient datum
-             && cfGoal outputDatum
-             == cfGoal datum
-             && cfDeadline outputDatum
-             == cfDeadline datum
-             && walletsExcept donor (Map.toList (cfWallets datum))
-             == walletsExcept donor (Map.toList outputWallets)
-             && case Map.lookup donor outputWallets of
-               Nothing -> False
-               Just outputWalletAmount ->
-                 case Map.lookup donor (cfWallets datum) of
-                   Nothing -> amount == outputWalletAmount
-                   Just previousAmount -> outputWalletAmount == previousAmount + amount
+             && cfRecipientD outputDatum
+             == cfRecipientD datum
+             && cfGoalD outputDatum
+             == cfGoalD datum
+             && cfDeadlineD outputDatum
+             == cfDeadlineD datum
+             && toBuiltinData (walletsExcept donor (cfWalletsD datum))
+             == toBuiltinData (walletsExcept donor outputWallets)
+             && maybe
+               False
+               ( \outputWalletAmount ->
+                   maybe
+                     (amount == outputWalletAmount)
+                     (\previousAmount -> outputWalletAmount == previousAmount + amount)
+                     (DMap.lookup donor (cfWalletsD datum))
+               )
+               (DMap.lookup donor outputWallets)
 
 -- ============================================================================
 -- 4. Withdraw
 -- ============================================================================
 
 {-# INLINEABLE checkWithdraw #-}
-checkWithdraw :: CrowdfundDatum -> TxInfo -> Integer -> Bool
-checkWithdraw datum tx contractAmount =
-  mustBeSignedBy tx (cfRecipient datum)
-    && not (mustStartBeforeTimeout (txInfoValidRange tx) (cfDeadline datum))
+checkWithdraw :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> Integer -> Bool
+checkWithdraw datum validRange sigs contractAmount =
+  mustBeSignedBy sigs (cfRecipientD datum)
+    && not (mustStartBeforeTimeout validRange (cfDeadlineD datum))
     && contractAmount
-    >= cfGoal datum
+    >= cfGoalD datum
 
 -- ============================================================================
 -- 5. Reclaim
 -- ============================================================================
 
 {-# INLINEABLE checkReclaim #-}
-checkReclaim :: CrowdfundDatum -> TxInfo -> [TxInInfo] -> [TxOut] -> Bool
-checkReclaim datum tx contractInputs contractOutputs =
-  let currentSigner = listHead (txInfoSignatories tx)
-   in case Map.lookup currentSigner (cfWallets datum) of
-        Nothing -> False
-        Just withdrawAmount ->
-          not (mustStartBeforeTimeout (txInfoValidRange tx) (cfDeadline datum))
-            && if mapSize (cfWallets datum) > 1
-              then
-                listLength contractOutputs
-                  == 1
-                  && let contractOutput = listHead contractOutputs
-                         outputDatum = getOutputDatum contractOutput
-                      in getAdaFromOutputs contractOutputs
-                           == getAdaFromInputs contractInputs
-                           - withdrawAmount
-                           && cfRecipient outputDatum
-                           == cfRecipient datum
-                           && cfGoal outputDatum
-                           == cfGoal datum
-                           && cfDeadline outputDatum
-                           == cfDeadline datum
-                           && Map.toList (cfWallets outputDatum)
-                           == walletsExcept currentSigner (Map.toList (cfWallets datum))
-              else listLength contractOutputs == 0
+checkReclaim :: CrowdfundDatumD -> POSIXTimeRange -> DList.List PubKeyHash -> DList.List TxInInfo -> DList.List TxOut -> Bool
+checkReclaim datum validRange sigs contractInputs contractOutputs =
+  let currentSigner = DList.head sigs
+   in maybe
+        False
+        ( \withdrawAmount ->
+            not (mustStartBeforeTimeout validRange (cfDeadlineD datum))
+              && if mapSize (cfWalletsD datum) > 1
+                then
+                  listLength contractOutputs
+                    == 1
+                    && let contractOutput = listHead contractOutputs
+                           outputDatum = getOutputDatum contractOutput
+                        in getAdaFromOutputs contractOutputs
+                             == getAdaFromInputs contractInputs
+                             - withdrawAmount
+                             && cfRecipientD outputDatum
+                             == cfRecipientD datum
+                             && cfGoalD outputDatum
+                             == cfGoalD datum
+                             && cfDeadlineD outputDatum
+                             == cfDeadlineD datum
+                             && toBuiltinData (cfWalletsD outputDatum)
+                             == toBuiltinData (walletsExcept currentSigner (cfWalletsD datum))
+                else listLength contractOutputs == 0
+        )
+        (DMap.lookup currentSigner (cfWalletsD datum))
 
 -- ============================================================================
 -- 6. Main validator
 -- ============================================================================
 
 {-# INLINEABLE crowdfundValidator #-}
-crowdfundValidator :: CrowdfundDatum -> CrowdfundRedeemer -> ScriptContext -> Bool
-crowdfundValidator datum redeemer ctx =
-  let tx = scriptContextTxInfo ctx
-      ownInput = findOwnInput ctx
+crowdfundValidator :: CrowdfundDatumD -> BuiltinData -> TxOutRef -> TxInfo -> Bool
+crowdfundValidator datum redeemerData ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoSignatories = sigs} =
+  let ownInput = findOwnInput ownRef inputs
       contractAddress = txOutAddress (txInInfoResolved ownInput)
-      contractInputs = getInputsByAddress (txInfoInputs tx) contractAddress
-      contractOutputs = getOutputsByAddress (txInfoOutputs tx) contractAddress
-      contractAmount = sumWallets (cfWallets datum)
+      contractInputs = getInputsByAddress inputs contractAddress
+      contractOutputs = getOutputsByAddress outputs contractAddress
+      contractAmount = sumWallets (cfWalletsD datum)
    in contractAmount
         == getAdaFromInputs contractInputs
-        && case redeemer of
-          Donate amount donor -> checkDonate datum tx contractOutputs contractAmount amount donor
-          Withdraw -> checkWithdraw datum tx contractAmount
-          Reclaim -> checkReclaim datum tx contractInputs contractOutputs
+        && matchCrowdfundRedeemerD
+          (unsafeFromBuiltinData redeemerData)
+          (\amount donor -> checkDonate datum validRange sigs contractOutputs contractAmount amount donor)
+          (checkWithdraw datum validRange sigs contractAmount)
+          (checkReclaim datum validRange sigs contractInputs contractOutputs)
 
 -- ============================================================================
 -- 7. Entry point and compiled script
@@ -235,11 +229,11 @@ crowdfundValidator datum redeemer ctx =
 mkCrowdfundValidator :: BuiltinData -> ()
 mkCrowdfundValidator ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-   in case scriptContextScriptInfo ctx of
-        SpendingScript _ (Just (Datum datumData)) ->
-          let datum = unsafeFromBuiltinData @CrowdfundDatum datumData
-              redeemer = unsafeFromBuiltinData @CrowdfundRedeemer (getRedeemer (scriptContextRedeemer ctx))
-           in if crowdfundValidator datum redeemer ctx then () else error ()
+      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+   in case scriptInfo of
+        SpendingScript ownRef (Just (Datum datumData)) ->
+          let datum = unsafeFromBuiltinData @CrowdfundDatumD datumData
+           in if crowdfundValidator datum (getRedeemer redeemer) ownRef txInfo then () else error ()
         _ -> error ()
 
 plinthCrowdfundScript :: Script

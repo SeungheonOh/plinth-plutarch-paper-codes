@@ -13,7 +13,7 @@ module Constitution.Contracts.ConstitutionSortedPlinth (
 ) where
 
 import Plutarch.Script (Script (..))
-import PlutusLedgerApi.V3 (BuiltinData, ScriptContext (..), ScriptInfo (..))
+import PlutusLedgerApi.Data.V3 (BuiltinData)
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI

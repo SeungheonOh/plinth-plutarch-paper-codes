@@ -1,7 +1,10 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module Crowdfund.Types.CrowdfundState where
 
@@ -11,10 +14,12 @@ import Plutarch.Internal.Lift ()
 import Plutarch.LedgerApi.AssocMap (KeyGuarantees (..), PMap)
 import Plutarch.LedgerApi.V3 (PPubKeyHash)
 import Plutarch.Prelude
+import PlutusLedgerApi.Data.V3 qualified as DV3
 import PlutusLedgerApi.V3 (POSIXTime, PubKeyHash)
 import PlutusTx qualified
+import PlutusTx.AsData (asData)
 import PlutusTx.AssocMap qualified as Map
-import PlutusTx.IsData (makeIsDataAsList)
+import PlutusTx.Data.AssocMap qualified as DMap
 
 -- ============================================================================
 -- Plinth: CrowdfundDatum
@@ -29,7 +34,7 @@ data CrowdfundDatum = CrowdfundDatum
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''CrowdfundDatum
+PlutusTx.makeIsDataIndexed ''CrowdfundDatum [('CrowdfundDatum, 0)]
 
 -- ============================================================================
 -- Plinth: CrowdfundRedeemer
@@ -49,6 +54,36 @@ PlutusTx.makeIsDataIndexed
   ]
 
 -- ============================================================================
+-- Plinth (AsData): CrowdfundDatumD
+-- ============================================================================
+
+$( asData
+     [d|
+       data CrowdfundDatumD = CrowdfundDatumD
+         { cfRecipientD :: DV3.PubKeyHash
+         , cfGoalD :: Integer
+         , cfDeadlineD :: Integer
+         , cfWalletsD :: DMap.Map DV3.PubKeyHash Integer
+         }
+         deriving newtype (PlutusTx.UnsafeFromData, PlutusTx.ToData)
+       |]
+ )
+
+-- ============================================================================
+-- Plinth (AsData): CrowdfundRedeemerD
+-- ============================================================================
+
+$( asData
+     [d|
+       data CrowdfundRedeemerD
+         = DonateD Integer DV3.PubKeyHash
+         | WithdrawD
+         | ReclaimD
+         deriving newtype (PlutusTx.UnsafeFromData)
+       |]
+ )
+
+-- ============================================================================
 -- Plutarch: PCrowdfundDatum
 -- ============================================================================
 
@@ -60,10 +95,10 @@ data PCrowdfundDatum (s :: S) = PCrowdfundDatum
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PCrowdfundDatum)
+  deriving (PlutusType) via (DeriveAsDataStruct PCrowdfundDatum)
 
 deriving via
-  DeriveDataPLiftable (PAsData PCrowdfundDatum) CrowdfundDatum
+  DeriveDataPLiftable PCrowdfundDatum CrowdfundDatum
   instance
     PLiftable PCrowdfundDatum
 

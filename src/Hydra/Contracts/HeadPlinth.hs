@@ -129,30 +129,29 @@ mustBurnAllHeadTokens mintVal headCurrencySymbol parties =
       Just tokenMap -> negate $ sumIntegers [v | (_, v) <- Map.toList tokenMap]
 
 {-# INLINEABLE mustNotMintOrBurn #-}
-mustNotMintOrBurn :: TxInfo -> Bool
-mustNotMintOrBurn txInfo =
+mustNotMintOrBurn :: MintValue -> Bool
+mustNotMintOrBurn mint =
   traceIfFalse "U01"
     $ Map.null
     $ getValue
-    $ unsafeFromBuiltinData (toBuiltinData (txInfoMint txInfo))
+    $ unsafeFromBuiltinData (toBuiltinData mint)
 
 {-# INLINEABLE mustPreserveHeadValue #-}
-mustPreserveHeadValue :: ScriptContext -> Bool
-mustPreserveHeadValue ctx =
+mustPreserveHeadValue :: [TxOut] -> TxOutRef -> [TxInInfo] -> Bool
+mustPreserveHeadValue outputs ownRef inputs =
   traceIfFalse "H4"
     $ val'
     `geq` val
  where
-  val = case findOwnInput ctx of
+  val = case findOwnInput ownRef inputs of
     Nothing -> mempty
     Just (TxInInfo _ txOut) -> txOutValue txOut
-  val' = txOutValue $ listHead $ txInfoOutputs $ scriptContextTxInfo ctx
+  val' = txOutValue $ listHead outputs
 
 {-# INLINEABLE findOwnInput #-}
-findOwnInput :: ScriptContext -> Maybe TxInInfo
-findOwnInput (ScriptContext txInfo _ (SpendingScript ref _)) =
-  listFind (\(TxInInfo r _) -> r == ref) (txInfoInputs txInfo)
-findOwnInput _ = Nothing
+findOwnInput :: TxOutRef -> [TxInInfo] -> Maybe TxInInfo
+findOwnInput ref inputs =
+  listFind (\(TxInInfo r _) -> r == ref) inputs
 
 {-# INLINEABLE hashTxOuts #-}
 hashTxOuts :: [TxOut] -> BuiltinByteString
@@ -205,14 +204,14 @@ depositDatum txOut =
 -- ============================================================================
 
 {-# INLINEABLE getHeadInput #-}
-getHeadInput :: ScriptContext -> TxInInfo
-getHeadInput ctx = case findOwnInput ctx of
+getHeadInput :: TxOutRef -> [TxInInfo] -> TxInInfo
+getHeadInput ownRef inputs = case findOwnInput ownRef inputs of
   Nothing -> traceError "H8"
   Just x -> x
 
 {-# INLINEABLE getHeadAddress #-}
-getHeadAddress :: ScriptContext -> Address
-getHeadAddress = txOutAddress . txInInfoResolved . getHeadInput
+getHeadAddress :: TxOutRef -> [TxInInfo] -> Address
+getHeadAddress ownRef inputs = txOutAddress . txInInfoResolved $ getHeadInput ownRef inputs
 
 {-# INLINEABLE mustNotChangeParameters #-}
 mustNotChangeParameters
@@ -230,16 +229,16 @@ mustNotChangeParameters (parties', parties) (cp', cp) (headId', headId) =
     == headId
 
 {-# INLINEABLE mustBeSignedByParticipant #-}
-mustBeSignedByParticipant :: ScriptContext -> CurrencySymbol -> Bool
-mustBeSignedByParticipant (ScriptContext txInfo _ _) headCurrencySymbol =
-  case getPubKeyHash <$> txInfoSignatories txInfo of
+mustBeSignedByParticipant :: [PubKeyHash] -> [TxInInfo] -> CurrencySymbol -> Bool
+mustBeSignedByParticipant signatories inputs headCurrencySymbol =
+  case getPubKeyHash <$> signatories of
     [signer] ->
       traceIfFalse "H5"
         $ listElem signer (unTokenName <$> participationTokens)
     [] -> traceError "H6"
     _ -> traceError "H7"
  where
-  participationTokens = go (txInfoInputs txInfo)
+  participationTokens = go inputs
   go [] = []
   go (TxInInfo _ txOut : rest) = findParticipationTokens headCurrencySymbol (txOutValue txOut) L.++ go rest
 
@@ -252,11 +251,11 @@ findParticipationTokens headCurrency (Value val) =
       [tn | (tn, n) <- Map.toList tokenMap, n == 1, tn /= TokenName hydraHeadV2]
 
 {-# INLINEABLE headOutputDatum #-}
-headOutputDatum :: ScriptContext -> Datum
-headOutputDatum ctx =
-  case txInfoOutputs (scriptContextTxInfo ctx) of
+headOutputDatum :: [TxOut] -> TxOutRef -> [TxInInfo] -> Datum
+headOutputDatum outputs ownRef inputs =
+  case outputs of
     (o : _)
-      | txOutAddress o == getHeadAddress ctx -> getTxOutDatum o
+      | txOutAddress o == getHeadAddress ownRef inputs -> getTxOutDatum o
     _ -> traceError "H11"
 
 {-# INLINEABLE getTxOutDatum #-}
@@ -268,23 +267,23 @@ getTxOutDatum o =
     OutputDatum d -> d
 
 {-# INLINEABLE makeContestationDeadline #-}
-makeContestationDeadline :: Integer -> ScriptContext -> POSIXTime
-makeContestationDeadline cperiod (ScriptContext txInfo _ _) =
-  case ivTo (txInfoValidRange txInfo) of
+makeContestationDeadline :: Integer -> POSIXTimeRange -> POSIXTime
+makeContestationDeadline cperiod validRange =
+  case ivTo validRange of
     UpperBound (Finite time) _ -> addContestationPeriod time cperiod
     _ -> traceError "H27"
 
 {-# INLINEABLE decodeHeadOutputClosedDatum #-}
-decodeHeadOutputClosedDatum :: ScriptContext -> ClosedDatum
-decodeHeadOutputClosedDatum ctx =
-  case fromBuiltinData @State $ getDatum (headOutputDatum ctx) of
+decodeHeadOutputClosedDatum :: [TxOut] -> TxOutRef -> [TxInInfo] -> ClosedDatum
+decodeHeadOutputClosedDatum outputs ownRef inputs =
+  case fromBuiltinData @State $ getDatum (headOutputDatum outputs ownRef inputs) of
     Just (Closed closedDatum) -> closedDatum
     _ -> traceError "H3"
 
 {-# INLINEABLE decodeHeadOutputOpenDatum #-}
-decodeHeadOutputOpenDatum :: ScriptContext -> OpenDatum
-decodeHeadOutputOpenDatum ctx =
-  case fromBuiltinData @State $ getDatum (headOutputDatum ctx) of
+decodeHeadOutputOpenDatum :: [TxOut] -> TxOutRef -> [TxInInfo] -> OpenDatum
+decodeHeadOutputOpenDatum outputs ownRef inputs =
+  case fromBuiltinData @State $ getDatum (headOutputDatum outputs ownRef inputs) of
     Just (Open openDatum) -> openDatum
     _ -> traceError "H3"
 
@@ -318,17 +317,16 @@ verifyPartySignature (headId, snapshotVersion, snapshotNumber, utxoHash, utxoToC
 -- ============================================================================
 
 {-# INLINEABLE checkIncrement #-}
-checkIncrement :: ScriptContext -> OpenDatum -> IncrementRedeemer -> Bool
-checkIncrement ctx openBefore redeemer =
+checkIncrement :: TxOutRef -> TxInfo -> OpenDatum -> IncrementRedeemer -> Bool
+checkIncrement ownRef txInfo openBefore redeemer =
   mustNotChangeParameters (prevParties, nextParties) (prevCperiod, nextCperiod) (prevHeadId, nextHeadId)
     && mustIncreaseVersion
     && mustIncreaseValue
-    && mustBeSignedByParticipant ctx prevHeadId
+    && mustBeSignedByParticipant signatories inputs prevHeadId
     && checkSnapshotSignature
     && claimedDepositIsSpent
  where
-  txInfo = scriptContextTxInfo ctx
-  inputs = txInfoInputs txInfo
+  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoSignatories = signatories} = txInfo
 
   depositInput =
     case listFind (\(TxInInfo ref _) -> ref == incrementRef redeemer) inputs of
@@ -344,13 +342,13 @@ checkIncrement ctx openBefore redeemer =
       Nothing -> traceError "H45"
       Just (TxInInfo _ o) -> txOutValue o
 
-  headOutValue = txOutValue $ listHead $ txInfoOutputs txInfo
+  headOutValue = txOutValue $ listHead outputs
 
   IncrementRedeemer{incrementSig = sig, incrementSnapshotNumber = sn, incrementRef = _} = redeemer
 
   claimedDepositIsSpent =
     traceIfFalse "H43"
-      $ listElem (incrementRef redeemer) (txInInfoOutRef <$> txInfoInputs txInfo)
+      $ listElem (incrementRef redeemer) (txInInfoOutRef <$> inputs)
 
   checkSnapshotSignature =
     verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, depositHash, emptyHash) sig
@@ -368,23 +366,22 @@ checkIncrement ctx openBefore redeemer =
       == headOutValue
 
   OpenDatum{openParties = prevParties, openContestationPeriod = prevCperiod, openHeadId = prevHeadId, openVersion = prevVersion} = openBefore
-  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum ctx
+  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum outputs ownRef inputs
 
 -- ============================================================================
 -- 9. checkDecrement
 -- ============================================================================
 
 {-# INLINEABLE checkDecrement #-}
-checkDecrement :: ScriptContext -> OpenDatum -> DecrementRedeemer -> Bool
-checkDecrement ctx openBefore redeemer =
+checkDecrement :: TxOutRef -> TxInfo -> OpenDatum -> DecrementRedeemer -> Bool
+checkDecrement ownRef txInfo openBefore redeemer =
   mustNotChangeParameters (prevParties, nextParties) (prevCperiod, nextCperiod) (prevHeadId, nextHeadId)
     && mustIncreaseVersion
     && checkSnapshotSignature
     && mustDecreaseValue
-    && mustBeSignedByParticipant ctx prevHeadId
+    && mustBeSignedByParticipant signatories inputs prevHeadId
  where
-  txInfo = scriptContextTxInfo ctx
-  outputs = txInfoOutputs txInfo
+  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoSignatories = signatories} = txInfo
 
   checkSnapshotSignature =
     verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, emptyHash, decommitUtxoHash) sig
@@ -406,10 +403,10 @@ checkDecrement ctx openBefore redeemer =
   DecrementRedeemer{decrementSig = sig, decrementSnapshotNumber = sn, decrementNumberOfDecommitOutputs = numDecommit} = redeemer
 
   OpenDatum{openParties = prevParties, openContestationPeriod = prevCperiod, openHeadId = prevHeadId, openVersion = prevVersion} = openBefore
-  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum ctx
+  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum outputs ownRef inputs
 
   headOutValue = txOutValue $ listHead outputs
-  headInValue = case findOwnInput ctx of
+  headInValue = case findOwnInput ownRef inputs of
     Nothing -> mempty
     Just (TxInInfo _ o) -> txOutValue o
 
@@ -420,23 +417,23 @@ checkDecrement ctx openBefore redeemer =
 -- ============================================================================
 
 {-# INLINEABLE checkClose #-}
-checkClose :: ScriptContext -> OpenDatum -> CloseRedeemer -> Bool
-checkClose ctx openBefore redeemer =
-  mustNotMintOrBurn txInfo
+checkClose :: TxOutRef -> TxInfo -> OpenDatum -> CloseRedeemer -> Bool
+checkClose ownRef txInfo openBefore redeemer =
+  mustNotMintOrBurn mint
     && hasBoundedValidity
     && checkDeadline
-    && mustBeSignedByParticipant ctx headId
+    && mustBeSignedByParticipant signatories inputs headId
     && mustNotChangeVersion
     && mustBeValidSnapshot
     && mustInitializeContesters
-    && mustPreserveHeadValue ctx
+    && mustPreserveHeadValue outputs ownRef inputs
     && mustNotChangeParameters (closedParties closedOut, openParties openBefore) (closedContestationPeriod closedOut, openContestationPeriod openBefore) (closedHeadId closedOut, headId)
  where
-  txInfo = scriptContextTxInfo ctx
+  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoMint = mint, txInfoSignatories = signatories} = txInfo
 
   OpenDatum{openParties = parties, openUtxoHash = initialUtxoHash, openContestationPeriod = cperiod, openHeadId = headId, openVersion = version} = openBefore
 
-  closedOut = decodeHeadOutputClosedDatum ctx
+  closedOut = decodeHeadOutputClosedDatum outputs ownRef inputs
 
   hasBoundedValidity =
     traceIfFalse "H22"
@@ -500,15 +497,15 @@ checkClose ctx openBefore redeemer =
   checkDeadline =
     traceIfFalse "H23"
       $ closedContestationDeadline closedOut
-      == makeContestationDeadline cperiod ctx
+      == makeContestationDeadline cperiod validRange
 
   cp = POSIXTime cperiod
 
-  tMax = case ivTo $ txInfoValidRange txInfo of
+  tMax = case ivTo validRange of
     UpperBound (Finite t) _ -> t
     _ -> traceError "H24"
 
-  tMin = case ivFrom $ txInfoValidRange txInfo of
+  tMin = case ivFrom validRange of
     LowerBound (Finite t) _ -> t
     _ -> traceError "H25"
 
@@ -521,22 +518,22 @@ checkClose ctx openBefore redeemer =
 -- ============================================================================
 
 {-# INLINEABLE checkContest #-}
-checkContest :: ScriptContext -> ClosedDatum -> ContestRedeemer -> Bool
-checkContest ctx closedDatum redeemer =
-  mustNotMintOrBurn txInfo
+checkContest :: TxOutRef -> TxInfo -> ClosedDatum -> ContestRedeemer -> Bool
+checkContest ownRef txInfo closedDatum redeemer =
+  mustNotMintOrBurn mint
     && mustNotChangeVersion
     && mustBeNewer
     && mustBeValidSnapshot
-    && mustBeSignedByParticipant ctx headId
+    && mustBeSignedByParticipant signatories inputs headId
     && checkSignedParticipantContestOnlyOnce
     && mustBeWithinContestationPeriod
     && mustUpdateContesters
     && mustPushDeadline
     && mustNotChangeParameters (closedParties closedOut, closedParties closedDatum) (closedContestationPeriod closedOut, closedContestationPeriod closedDatum) (closedHeadId closedOut, headId)
-    && mustPreserveHeadValue ctx
+    && mustPreserveHeadValue outputs ownRef inputs
  where
-  txInfo = scriptContextTxInfo ctx
-  closedOut = decodeHeadOutputClosedDatum ctx
+  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoMint = mint, txInfoSignatories = signatories} = txInfo
+  closedOut = decodeHeadOutputClosedDatum outputs ownRef inputs
   headId = closedHeadId closedDatum
   parties = closedParties closedDatum
   version = closedVersion closedDatum
@@ -588,7 +585,7 @@ checkContest ctx closedDatum redeemer =
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, closedAlphaUTxOHash closedOut, emptyHash) sig
 
   mustBeWithinContestationPeriod =
-    case ivTo (txInfoValidRange txInfo) of
+    case ivTo validRange of
       UpperBound (Finite time) _ ->
         traceIfFalse "H30"
           $ time
@@ -613,7 +610,7 @@ checkContest ctx closedDatum redeemer =
       : contesters
 
   contester =
-    case txInfoSignatories txInfo of
+    case signatories of
       [signer] -> signer
       _ -> traceError "H35"
 
@@ -626,22 +623,22 @@ checkContest ctx closedDatum redeemer =
 -- ============================================================================
 
 {-# INLINEABLE headIsFinalizedWith #-}
-headIsFinalizedWith :: ScriptContext -> ClosedDatum -> Integer -> Integer -> Integer -> Bool
-headIsFinalizedWith (ScriptContext txInfo _ _) closedDatum numberOfFanoutOutputs numberOfCommitOutputs numberOfDecommitOutputs =
+headIsFinalizedWith :: TxInfo -> ClosedDatum -> Integer -> Integer -> Integer -> Bool
+headIsFinalizedWith txInfo closedDatum numberOfFanoutOutputs numberOfCommitOutputs numberOfDecommitOutputs =
   mustBurnAllHeadTokens mintedVal headId parties
     && hasSameUTxOHash
     && hasSameCommitUTxOHash
     && hasSameDecommitUTxOHash
     && afterContestationDeadline
  where
-  mintedVal = unsafeFromBuiltinData (toBuiltinData (txInfoMint txInfo))
+  TxInfo{txInfoMint = mint, txInfoOutputs = outputs, txInfoValidRange = validRange} = txInfo
+  mintedVal = unsafeFromBuiltinData (toBuiltinData mint)
   headId = closedHeadId closedDatum
   parties = closedParties closedDatum
   utxoHash = closedUtxoHash closedDatum
   alphaUTxOHash = closedAlphaUTxOHash closedDatum
   omegaUTxOHash = closedOmegaUTxOHash closedDatum
   contestationDeadline = closedContestationDeadline closedDatum
-  outputs = txInfoOutputs txInfo
 
   hasSameUTxOHash =
     traceIfFalse "H39"
@@ -659,7 +656,7 @@ headIsFinalizedWith (ScriptContext txInfo _ _) closedDatum numberOfFanoutOutputs
       == hashTxOuts (listTake numberOfDecommitOutputs (listDrop numberOfFanoutOutputs outputs))
 
   afterContestationDeadline =
-    case ivFrom (txInfoValidRange txInfo) of
+    case ivFrom validRange of
       LowerBound (Finite time) _ ->
         traceIfFalse "H41"
           $ time
@@ -671,15 +668,15 @@ headIsFinalizedWith (ScriptContext txInfo _ _) closedDatum numberOfFanoutOutputs
 -- ============================================================================
 
 {-# INLINEABLE headValidator #-}
-headValidator :: State -> Input -> ScriptContext -> Bool
-headValidator oldState input ctx =
+headValidator :: State -> Input -> TxOutRef -> TxInfo -> Bool
+headValidator oldState input ownRef txInfo =
   case (oldState, input) of
-    (Open openDatum, Increment red) -> checkIncrement ctx openDatum red
-    (Open openDatum, Decrement red) -> checkDecrement ctx openDatum red
-    (Open openDatum, Close red) -> checkClose ctx openDatum red
-    (Closed closedDatum, Contest red) -> checkContest ctx closedDatum red
+    (Open openDatum, Increment red) -> checkIncrement ownRef txInfo openDatum red
+    (Open openDatum, Decrement red) -> checkDecrement ownRef txInfo openDatum red
+    (Open openDatum, Close red) -> checkClose ownRef txInfo openDatum red
+    (Closed closedDatum, Contest red) -> checkContest ownRef txInfo closedDatum red
     (Closed closedDatum, Fanout{fanoutNumberOfFanoutOutputs, fanoutNumberOfCommitOutputs, fanoutNumberOfDecommitOutputs}) ->
-      headIsFinalizedWith ctx closedDatum fanoutNumberOfFanoutOutputs fanoutNumberOfCommitOutputs fanoutNumberOfDecommitOutputs
+      headIsFinalizedWith txInfo closedDatum fanoutNumberOfFanoutOutputs fanoutNumberOfCommitOutputs fanoutNumberOfDecommitOutputs
     _ -> traceError "H1"
 
 -- ============================================================================
@@ -690,11 +687,12 @@ headValidator oldState input ctx =
 mkHeadValidator :: BuiltinData -> ()
 mkHeadValidator ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-   in case scriptContextScriptInfo ctx of
-        SpendingScript _ (Just (Datum datumData)) ->
+      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+   in case scriptInfo of
+        SpendingScript ownRef (Just (Datum datumData)) ->
           let state = unsafeFromBuiltinData @State datumData
-              input = unsafeFromBuiltinData @Input $ getRedeemer $ scriptContextRedeemer ctx
-           in if headValidator state input ctx then () else error ()
+              input = unsafeFromBuiltinData @Input $ getRedeemer redeemer
+           in if headValidator state input ownRef txInfo then () else error ()
         _ -> error ()
 
 plinthHeadScript :: Script

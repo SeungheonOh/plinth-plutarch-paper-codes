@@ -2,17 +2,26 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module SmartTokens.Types.PTokenDirectory (
   DirectorySetNode (..),
+  DirectorySetNodeD,
+  keyD,
+  nextD,
+  transferLogicScriptD,
+  issuerLogicScriptD,
+  globalStateCSD,
   PDirectorySetNode (..),
   PBlacklistNode (..),
   BlacklistNode (..),
@@ -40,9 +49,11 @@ import Plutarch.Internal.Term (Config (NoTracing))
 import Plutarch.LedgerApi.V3 (PCredential, PCurrencySymbol)
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
+import PlutusLedgerApi.Data.V3 qualified as DV3
 import PlutusLedgerApi.V3 (BuiltinByteString, Credential, CurrencySymbol)
 import PlutusTx (Data (B, Constr))
-import PlutusTx.IsData (makeIsDataAsList)
+import PlutusTx qualified
+import PlutusTx.AsData (asData)
 
 -- ============================================================================
 -- Plutarch helpers (defined before TH splices to avoid staging issues)
@@ -83,7 +94,7 @@ data BlacklistNode
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''BlacklistNode
+PlutusTx.makeIsDataIndexed ''BlacklistNode [('BlacklistNode, 0)]
 
 -- ============================================================================
 -- Plutarch: PBlacklistNode
@@ -96,10 +107,10 @@ data PBlacklistNode (s :: S)
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PShow, PEq)
-  deriving (PlutusType) via (DeriveAsDataRec PBlacklistNode)
+  deriving (PlutusType) via (DeriveAsDataStruct PBlacklistNode)
 
 deriving via
-  DeriveDataPLiftable (PAsData PBlacklistNode) BlacklistNode
+  DeriveDataPLiftable PBlacklistNode BlacklistNode
   instance
     PLiftable PBlacklistNode
 
@@ -146,7 +157,24 @@ data DirectorySetNode = DirectorySetNode
   deriving stock (Show, Eq, Generic)
   deriving anyclass (SOP.Generic)
 
-makeIsDataAsList ''DirectorySetNode
+PlutusTx.makeIsDataIndexed ''DirectorySetNode [('DirectorySetNode, 0)]
+
+-- ============================================================================
+-- Plinth (AsData): DirectorySetNodeD
+-- ============================================================================
+
+$( asData
+     [d|
+       data DirectorySetNodeD = DirectorySetNodeD
+         { keyD :: DV3.CurrencySymbol
+         , nextD :: DV3.CurrencySymbol
+         , transferLogicScriptD :: DV3.Credential
+         , issuerLogicScriptD :: DV3.Credential
+         , globalStateCSD :: DV3.CurrencySymbol
+         }
+         deriving newtype (PlutusTx.UnsafeFromData, PlutusTx.ToData)
+       |]
+ )
 
 -- ============================================================================
 -- Plutarch: PDirectorySetNode
@@ -162,10 +190,10 @@ data PDirectorySetNode (s :: S)
   }
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataRec PDirectorySetNode)
+  deriving (PlutusType) via (DeriveAsDataStruct PDirectorySetNode)
 
 deriving via
-  DeriveDataPLiftable (PAsData PDirectorySetNode) DirectorySetNode
+  DeriveDataPLiftable PDirectorySetNode DirectorySetNode
   instance
     PLiftable PDirectorySetNode
 

@@ -13,23 +13,25 @@ module SmartTokens.Contracts.ProgrammableLogicBasePlinth (
   plinthProgrammableLogicGlobalScript,
 ) where
 
-import PlutusLedgerApi.V3
+import PlutusLedgerApi.Data.V3
+import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
-import PlutusTx.AssocMap qualified as Map
-import PlutusTx.Foldable (foldr)
+import PlutusTx.Builtins qualified as Builtins
+import PlutusTx.Builtins.Internal qualified as BI
+import PlutusTx.Data.AssocMap qualified as DMap
+import PlutusTx.Data.List qualified as DList
 import PlutusTx.Prelude
 
 import Plutarch.Script (Script (..))
 import PlutusTx.Code (getPlcNoAnn)
 import UntypedPlutusCore qualified as UPLC
 
-import SmartTokens.Types.PTokenDirectory (DirectorySetNode (..))
+import SmartTokens.Types.PTokenDirectory (DirectorySetNodeD, issuerLogicScriptD, keyD, nextD, transferLogicScriptD)
 import SmartTokens.Types.ProgrammableLogicGlobal (ProgrammableLogicGlobalRedeemer (..))
-import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (..))
+import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParamsD, directoryNodeCSD, progLogicCredD)
 
--- ============================================================================
--- 1. Plinth infrastructure
--- ============================================================================
+type BIPairs = BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData)
+type BIList = BI.BuiltinList BI.BuiltinData
 
 compiledCodeToScript :: PlutusTx.CompiledCode a -> Script
 compiledCodeToScript code =
@@ -40,543 +42,556 @@ compiledCodeToScript code =
 dataEqual :: (PlutusTx.ToData a) => a -> a -> Bool
 dataEqual a b = PlutusTx.toBuiltinData a == PlutusTx.toBuiltinData b
 
--- ============================================================================
--- 2. List operations
--- ============================================================================
+{-# INLINEABLE nilPairs #-}
+nilPairs :: BIPairs
+nilPairs = BI.mkNilPairData BI.unitval
 
-{-# INLINEABLE dropList #-}
-dropList :: Integer -> [a] -> [a]
-dropList n xs
+{-# INLINEABLE consPair #-}
+consPair :: BI.BuiltinData -> BI.BuiltinData -> BIPairs -> BIPairs
+consPair k v = BI.mkCons (BI.mkPairData k v)
+
+{-# INLINEABLE dlistToBI #-}
+dlistToBI :: DList.List a -> BIList
+dlistToBI = DList.toBuiltinList
+
+{-# INLINEABLE biDrop #-}
+biDrop :: Integer -> BIList -> BIList
+biDrop n xs
   | n <= 0 = xs
-  | otherwise = case xs of
-      [] -> []
-      (_ : ys) -> dropList (n - 1) ys
+  | otherwise = Builtins.matchList xs (const xs) (\_ ys -> biDrop (n - 1) ys)
 
-{-# INLINEABLE listLength #-}
-listLength :: [a] -> Integer
-listLength [] = 0
-listLength (_ : xs) = 1 + listLength xs
+{-# INLINEABLE biIndex #-}
+biIndex :: BIList -> Integer -> BI.BuiltinData
+biIndex xs n =
+  Builtins.matchList
+    xs
+    (const (traceError "index out of bounds"))
+    (\h t -> if n <= 0 then h else biIndex t (n - 1))
 
-{-# INLINEABLE appendList #-}
-appendList :: [a] -> [a] -> [a]
-appendList xs ys = foldr (:) ys xs
+{-# INLINEABLE biLength #-}
+biLength :: BIList -> Integer
+biLength xs =
+  Builtins.matchList xs (const 0) (\_ t -> 1 + biLength t)
+
+{-# INLINEABLE biReversePairs #-}
+biReversePairs :: BIPairs -> BIPairs
+biReversePairs = go nilPairs
+ where
+  go acc xs =
+    Builtins.matchList xs (const acc) (\h t -> go (BI.mkCons h acc) t)
 
 {-# INLINEABLE pkhElem #-}
-pkhElem :: PubKeyHash -> [PubKeyHash] -> Bool
-pkhElem _ [] = False
-pkhElem pkh (x : xs) = pkh == x || pkhElem pkh xs
+pkhElem :: PubKeyHash -> DList.List PubKeyHash -> Bool
+pkhElem = DList.elem
 
-{-# INLINEABLE isNullList #-}
-isNullList :: [a] -> Bool
-isNullList [] = True
-isNullList _ = False
-
-{-# INLINEABLE indexList #-}
-indexList :: [a] -> Integer -> a
-indexList [] _ = traceError "index out of bounds"
-indexList (x : xs) n
-  | n <= 0 = x
-  | otherwise = indexList xs (n - 1)
-
--- ============================================================================
--- 3. Value helpers
--- ============================================================================
-
-{-# INLINEABLE valueToSortedList #-}
-valueToSortedList :: Value -> [(CurrencySymbol, [(TokenName, Integer)])]
-valueToSortedList (Value m) = [(cs, Map.toList tns) | (cs, tns) <- Map.toList m]
-
-{-# INLINEABLE sortedListToValue #-}
-sortedListToValue :: [(CurrencySymbol, [(TokenName, Integer)])] -> Value
-sortedListToValue xs = Value (Map.unsafeFromList [(cs, Map.unsafeFromList tns) | (cs, tns) <- xs])
-
-{-# INLINEABLE emptyValue #-}
-emptyValue :: Value
-emptyValue = sortedListToValue []
-
--- | Strip Ada (first entry) from a ledger-provided sorted value.
 {-# INLINEABLE stripAda #-}
 stripAda :: Value -> Value
 stripAda (Value m) =
-  case Map.toList m of
-    [] -> Value Map.empty
-    (_ : xs) -> Value (Map.unsafeFromList xs)
+  let bl = DMap.toBuiltinList m
+   in Builtins.matchList
+        bl
+        (const (Value DMap.empty))
+        (\_ rest -> Value (DMap.unsafeFromBuiltinList rest))
 
--- | Merge two sorted token-name maps by asset-wise addition.
-{-# INLINEABLE tokenPairsUnion #-}
-tokenPairsUnion :: [(TokenName, Integer)] -> [(TokenName, Integer)] -> [(TokenName, Integer)]
-tokenPairsUnion [] bs = bs
-tokenPairsUnion as [] = as
-tokenPairsUnion aAll@((tnA, qA) : as) bAll@((tnB, qB) : bs)
-  | tnA == tnB = (tnA, qA + qB) : tokenPairsUnion as bs
-  | tnA < tnB = (tnA, qA) : tokenPairsUnion as bAll
-  | otherwise = (tnB, qB) : tokenPairsUnion aAll bs
+{-# INLINEABLE stripAdaBI #-}
+stripAdaBI :: BI.BuiltinData -> BIPairs
+stripAdaBI valData =
+  let bl = BI.unsafeDataAsMap valData
+   in Builtins.matchList bl (const nilPairs) (\_ rest -> rest)
 
--- | Merge two sorted currency-symbol maps by asset-wise addition.
-{-# INLINEABLE currencyPairsUnion #-}
-currencyPairsUnion
-  :: [(CurrencySymbol, [(TokenName, Integer)])]
-  -> [(CurrencySymbol, [(TokenName, Integer)])]
-  -> [(CurrencySymbol, [(TokenName, Integer)])]
-currencyPairsUnion [] bs = bs
-currencyPairsUnion as [] = as
-currencyPairsUnion aAll@((csA, tnsA) : as) bAll@((csB, tnsB) : bs)
-  | csA == csB = (csA, tokenPairsUnion tnsA tnsB) : currencyPairsUnion as bs
-  | csA < csB = (csA, tnsA) : currencyPairsUnion as bAll
-  | otherwise = (csB, tnsB) : currencyPairsUnion aAll bs
+{-# INLINEABLE biTokenUnion #-}
+biTokenUnion :: BIPairs -> BIPairs -> BIPairs
+biTokenUnion xs ys =
+  Builtins.matchList xs (const ys) $ \xh xr ->
+    Builtins.matchList ys (const xs) $ \yh yr ->
+      let xk = BI.fst xh
+          yk = BI.fst yh
+          xb = BI.unsafeDataAsB xk
+          yb = BI.unsafeDataAsB yk
+       in if Builtins.equalsByteString xb yb
+            then consPair xk (BI.mkI (BI.unsafeDataAsI (BI.snd xh) + BI.unsafeDataAsI (BI.snd yh))) (biTokenUnion xr yr)
+            else
+              if Builtins.lessThanByteString xb yb
+                then BI.mkCons xh (biTokenUnion xr ys)
+                else BI.mkCons yh (biTokenUnion xs yr)
 
--- | Add two sorted non-Ada Values.
+{-# INLINEABLE biCurrencyUnion #-}
+biCurrencyUnion :: BIPairs -> BIPairs -> BIPairs
+biCurrencyUnion xs ys =
+  Builtins.matchList xs (const ys) $ \xh xr ->
+    Builtins.matchList ys (const xs) $ \yh yr ->
+      let xk = BI.fst xh
+          yk = BI.fst yh
+          xb = BI.unsafeDataAsB xk
+          yb = BI.unsafeDataAsB yk
+       in if Builtins.equalsByteString xb yb
+            then consPair xk (BI.mkMap (biTokenUnion (BI.unsafeDataAsMap (BI.snd xh)) (BI.unsafeDataAsMap (BI.snd yh)))) (biCurrencyUnion xr yr)
+            else
+              if Builtins.lessThanByteString xb yb
+                then BI.mkCons xh (biCurrencyUnion xr ys)
+                else BI.mkCons yh (biCurrencyUnion xs yr)
+
 {-# INLINEABLE valueUnion #-}
 valueUnion :: Value -> Value -> Value
-valueUnion a b = sortedListToValue (currencyPairsUnion (valueToSortedList a) (valueToSortedList b))
+valueUnion a b = Value (DMap.unsafeFromBuiltinList (biCurrencyUnion (DMap.toBuiltinList (getValue a)) (DMap.toBuiltinList (getValue b))))
 
--- | Get the quantity of a specific asset in a Value.
 {-# INLINEABLE assetQtyInValue #-}
 assetQtyInValue :: Value -> CurrencySymbol -> TokenName -> Integer
 assetQtyInValue (Value m) cs tn =
-  let goCS pairs = case pairs of
-        [] -> 0
-        ((cs', tns) : rest)
-          | cs' == cs -> goTN (Map.toList tns)
-          | cs < cs' -> 0
-          | otherwise -> goCS rest
-      goTN pairs = case pairs of
-        [] -> 0
-        ((tn', qty) : rest)
-          | tn' == tn -> qty
-          | tn < tn' -> 0
-          | otherwise -> goTN rest
-   in goCS (Map.toList m)
+  case DMap.lookup cs m of
+    Nothing -> 0
+    Just tns ->
+      case DMap.lookup tn tns of
+        Nothing -> 0
+        Just qty -> qty
 
--- | Get token pairs for a specific currency symbol from a sorted value.
 {-# INLINEABLE tokensForCurrencySymbol #-}
-tokensForCurrencySymbol :: CurrencySymbol -> Value -> [(TokenName, Integer)]
+tokensForCurrencySymbol :: CurrencySymbol -> Value -> BIPairs
 tokensForCurrencySymbol targetCs (Value m) =
-  let go pairs = case pairs of
-        [] -> []
-        ((cs, tns) : rest)
-          | cs == targetCs -> Map.toList tns
-          | targetCs < cs -> []
-          | otherwise -> go rest
-   in go (Map.toList m)
+  case DMap.lookup targetCs m of
+    Nothing -> nilPairs
+    Just tns -> DMap.toBuiltinList tns
 
--- | Negate all quantities in a token-name map.
-{-# INLINEABLE negateTokens #-}
-negateTokens :: [(TokenName, Integer)] -> [(TokenName, Integer)]
-negateTokens [] = []
-negateTokens ((tn, qty) : rest) = (tn, negate qty) : negateTokens rest
+{-# INLINEABLE biNegateTokens #-}
+biNegateTokens :: BIPairs -> BIPairs
+biNegateTokens xs =
+  Builtins.matchList xs (const nilPairs) $ \h t ->
+    consPair (BI.fst h) (BI.mkI (negate (BI.unsafeDataAsI (BI.snd h)))) (biNegateTokens t)
 
--- | Subtract token pairs: input - output, skipping zero results.
-{-# INLINEABLE subtractTokens #-}
-subtractTokens :: [(TokenName, Integer)] -> [(TokenName, Integer)] -> [(TokenName, Integer)]
-subtractTokens [] outs = negateTokens outs
-subtractTokens ins [] = ins
-subtractTokens inAll@((inTn, inQty) : inRest) outAll@((outTn, outQty) : outRest)
-  | inTn <= outTn =
-      if inTn == outTn
-        then
-          let diff = inQty - outQty
-           in if diff == 0
-                then subtractTokens inRest outRest
-                else (inTn, diff) : subtractTokens inRest outRest
-        else -- outTn > inTn -> token only in input
-          (inTn, inQty) : subtractTokens inRest outAll
-  -- outTn < inTn -> token only in output
-  | otherwise = (outTn, negate outQty) : subtractTokens inAll outRest
+{-# INLINEABLE biSubtractTokens #-}
+biSubtractTokens :: BIPairs -> BIPairs -> BIPairs
+biSubtractTokens ins outs =
+  Builtins.matchList
+    ins
+    (const (biNegateTokens outs))
+    ( \inH inR ->
+        Builtins.matchList
+          outs
+          (const ins)
+          ( \outH outR ->
+              let inK = BI.fst inH
+                  outK = BI.fst outH
+                  inB = BI.unsafeDataAsB inK
+                  outB = BI.unsafeDataAsB outK
+               in if Builtins.lessThanByteString inB outB
+                    then BI.mkCons inH (biSubtractTokens inR outs)
+                    else
+                      if Builtins.equalsByteString inB outB
+                        then
+                          let diff = BI.unsafeDataAsI (BI.snd inH) - BI.unsafeDataAsI (BI.snd outH)
+                           in if diff == 0
+                                then biSubtractTokens inR outR
+                                else consPair inK (BI.mkI diff) (biSubtractTokens inR outR)
+                        else consPair outK (BI.mkI (negate (BI.unsafeDataAsI (BI.snd outH)))) (biSubtractTokens ins outR)
+          )
+    )
 
--- | Check that actualTokens contain at least requiredTokens quantities.
-{-# INLINEABLE tokenPairsContain #-}
-tokenPairsContain :: [(TokenName, Integer)] -> [(TokenName, Integer)] -> Bool
-tokenPairsContain _ [] = True
-tokenPairsContain [] ((_, reqQty) : reqRest) =
-  (0 >= reqQty) && tokenPairsContain [] reqRest
-tokenPairsContain actAll@((actTn, actQty) : actRest) reqAll@((reqTn, reqQty) : reqRest)
-  | actTn == reqTn = (actQty >= reqQty) && tokenPairsContain actRest reqRest
-  | actTn < reqTn = tokenPairsContain actRest reqAll
-  | otherwise = (0 >= reqQty) && tokenPairsContain actAll reqRest
+{-# INLINEABLE biTokenPairsContain #-}
+biTokenPairsContain :: BIPairs -> BIPairs -> Bool
+biTokenPairsContain act req =
+  Builtins.matchList
+    req
+    (const True)
+    ( \reqH reqR ->
+        let reqQty = BI.unsafeDataAsI (BI.snd reqH)
+         in Builtins.matchList
+              act
+              (const ((0 >= reqQty) && biTokenPairsContain nilPairs reqR))
+              ( \actH actR ->
+                  let actK = BI.unsafeDataAsB (BI.fst actH); reqK = BI.unsafeDataAsB (BI.fst reqH)
+                   in if Builtins.equalsByteString actK reqK
+                        then (BI.unsafeDataAsI (BI.snd actH) >= reqQty) && biTokenPairsContain actR reqR
+                        else
+                          if Builtins.lessThanByteString actK reqK
+                            then biTokenPairsContain actR req
+                            else (0 >= reqQty) && biTokenPairsContain act reqR
+              )
+    )
 
--- ============================================================================
--- 4. Credential and address helpers
--- ============================================================================
-
-{-# INLINEABLE getPaymentCredential #-}
-getPaymentCredential :: Address -> Credential
-getPaymentCredential (Address cred _) = cred
-
-{-# INLINEABLE getStakingCredential #-}
-getStakingCredential :: Address -> Maybe StakingCredential
-getStakingCredential (Address _ mStake) = mStake
-
--- ============================================================================
--- 5. Withdrawal and script info checking
--- ============================================================================
-
-{-# INLINEABLE isScriptInvokedEntries #-}
-isScriptInvokedEntries :: Credential -> [(Credential, Lovelace)] -> Bool
-isScriptInvokedEntries _ [] = False
-isScriptInvokedEntries cred ((c, _) : rest) =
-  c == cred || isScriptInvokedEntries cred rest
+{-# INLINEABLE isScriptInvoked #-}
+isScriptInvoked :: Credential -> DMap.Map Credential Lovelace -> Bool
+isScriptInvoked = DMap.member
 
 {-# INLINEABLE isRewardingScriptInfo #-}
 isRewardingScriptInfo :: ScriptInfo -> Bool
-isRewardingScriptInfo (RewardingScript _) = True
-isRewardingScriptInfo _ = False
+isRewardingScriptInfo si = BI.fst (BI.unsafeDataAsConstr (toBuiltinData si)) `Builtins.equalsInteger` 2
 
 {-# INLINEABLE isSpendingPurpose #-}
 isSpendingPurpose :: ScriptPurpose -> Bool
-isSpendingPurpose (Spending _) = True
-isSpendingPurpose _ = False
+isSpendingPurpose sp = BI.fst (BI.unsafeDataAsConstr (toBuiltinData sp)) `Builtins.equalsInteger` 1
 
--- ============================================================================
--- 6. Value CS checking
--- ============================================================================
-
--- | Check that the first non-Ada policy matches a state-token CS.
 {-# INLINEABLE hasCsFirstNonAda #-}
 hasCsFirstNonAda :: CurrencySymbol -> Value -> Bool
 hasCsFirstNonAda cs (Value m) =
-  case Map.toList m of
-    (_ : (cs', _) : _) -> cs' == cs
-    _ -> False
-
--- | Safe variant that returns False instead of crashing on missing non-Ada entries.
-{-# INLINEABLE hasCsFirstNonAdaOrFalse #-}
-hasCsFirstNonAdaOrFalse :: CurrencySymbol -> Value -> Bool
-hasCsFirstNonAdaOrFalse = hasCsFirstNonAda
-
--- ============================================================================
--- 7. Value aggregation
--- ============================================================================
+  let bl = DMap.toBuiltinList m
+   in Builtins.matchList
+        bl
+        (const False)
+        ( \_ rest ->
+            Builtins.matchList
+              rest
+              (const False)
+              (\second _ -> unsafeFromBuiltinData (BI.fst second) == cs)
+        )
 
 {-# INLINEABLE valueFromCred #-}
 valueFromCred
   :: Credential
-  -> [PubKeyHash]
-  -> [(Credential, Lovelace)]
-  -> [TxInInfo]
+  -> DList.List PubKeyHash
+  -> DMap.Map Credential Lovelace
+  -> DList.List TxInInfo
   -> Value
-valueFromCred cred sigs withdrawalEntries inputs =
-  go emptyValue inputs
+valueFromCred cred sigs wdrl inputs =
+  Value (DMap.unsafeFromBuiltinList (go nilPairs (dlistToBI inputs)))
  where
-  go acc [] = acc
-  go acc (TxInInfo _ txOut : rest) =
-    let addr = txOutAddress txOut
-        paymentCred = getPaymentCredential addr
-     in if paymentCred == cred
-          then case getStakingCredential addr of
-            Just (StakingHash ownerCred) ->
-              case ownerCred of
-                PubKeyCredential pkh ->
-                  if pkhElem pkh sigs
-                    then go (valueUnion acc (stripAda (txOutValue txOut))) rest
-                    else traceError "Missing required pk witness"
-                ScriptCredential _ ->
-                  if isScriptInvokedEntries ownerCred withdrawalEntries
-                    then go (valueUnion acc (stripAda (txOutValue txOut))) rest
-                    else traceError "Missing required script witness"
-            _ -> error ()
-          else go acc rest
+  go acc xs =
+    Builtins.matchList xs (const acc) $ \inp rest ->
+      let TxInInfo _ txOut = unsafeFromBuiltinData inp
+          TxOut{txOutAddress = addr, txOutValue = val} = txOut
+          Address paymentCred mStake = addr
+       in if paymentCred == cred
+            then case mStake of
+              Just (StakingHash ownerCred) ->
+                case ownerCred of
+                  PubKeyCredential pkh ->
+                    if pkhElem pkh sigs
+                      then go (biCurrencyUnion acc (stripAdaBI (toBuiltinData val))) rest
+                      else traceError "Missing required pk witness"
+                  ScriptCredential _ ->
+                    if isScriptInvoked ownerCred wdrl
+                      then go (biCurrencyUnion acc (stripAdaBI (toBuiltinData val))) rest
+                      else traceError "Missing required script witness"
+              _ -> error ()
+            else go acc rest
 
 {-# INLINEABLE valueToCred #-}
-valueToCred :: Credential -> [TxOut] -> Value
+valueToCred :: Credential -> DList.List TxOut -> Value
 valueToCred cred outputs =
-  go emptyValue outputs
+  Value (DMap.unsafeFromBuiltinList (go nilPairs (dlistToBI outputs)))
  where
-  go acc [] = acc
-  go acc (txOut : rest) =
-    let paymentCred = getPaymentCredential (txOutAddress txOut)
-     in if paymentCred == cred
-          then go (valueUnion acc (stripAda (txOutValue txOut))) rest
-          else go acc rest
-
--- ============================================================================
--- 8. Output containment check
--- ============================================================================
+  go acc xs =
+    Builtins.matchList xs (const acc) $ \txOutData rest ->
+      let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
+          Address paymentCred _ = addr
+       in if paymentCred == cred
+            then go (biCurrencyUnion acc (stripAdaBI (toBuiltinData val))) rest
+            else go acc rest
 
 {-# INLINEABLE outputsContainExpectedValueAtCred #-}
-outputsContainExpectedValueAtCred :: Credential -> [TxOut] -> Value -> Bool
+outputsContainExpectedValueAtCred :: Credential -> DList.List TxOut -> Value -> Bool
 outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
-  let expectedCsPairs = valueToSortedList expectedValue
-   in case expectedCsPairs of
-        [] -> True
-        [(expCs, expTnPairs)] ->
-          case expTnPairs of
-            [(expTn, expQty)] ->
-              hasAtLeastAssetInProgOutputs expQty 0 expCs expTn txOutputs
-            _ -> multiAssetCheck expectedCsPairs
-        _ -> multiAssetCheck expectedCsPairs
+  let expectedCsPairs = DMap.toBuiltinList (getValue expectedValue)
+   in Builtins.matchList
+        expectedCsPairs
+        (const True)
+        ( \firstCsPair restCsPairs ->
+            Builtins.matchList
+              restCsPairs
+              ( const
+                  ( let expCs = unsafeFromBuiltinData (BI.fst firstCsPair) :: CurrencySymbol
+                        expTnPairs = BI.unsafeDataAsMap (BI.snd firstCsPair)
+                     in Builtins.matchList
+                          expTnPairs
+                          (const True)
+                          ( \firstTnPair restTnPairs ->
+                              Builtins.matchList
+                                restTnPairs
+                                ( const
+                                    ( hasAtLeastAssetInProgOutputs
+                                        (BI.unsafeDataAsI (BI.snd firstTnPair))
+                                        0
+                                        expCs
+                                        (unsafeFromBuiltinData (BI.fst firstTnPair))
+                                        (dlistToBI txOutputs)
+                                    )
+                                )
+                                (\_ _ -> multiAssetCheck expectedCsPairs)
+                          )
+                  )
+              )
+              (\_ _ -> multiAssetCheck expectedCsPairs)
+        )
  where
   hasAtLeastAssetInProgOutputs reqQty curQty cs tn outs
     | curQty >= reqQty = True
-    | otherwise = case outs of
-        [] -> curQty >= reqQty
-        (txOut : rest) ->
-          if getPaymentCredential (txOutAddress txOut) == progLogicCred
-            then hasAtLeastAssetInProgOutputs reqQty (curQty + assetQtyInValue (txOutValue txOut) cs tn) cs tn rest
-            else hasAtLeastAssetInProgOutputs reqQty curQty cs tn rest
+    | otherwise =
+        Builtins.matchList
+          outs
+          (const (curQty >= reqQty))
+          ( \txOutData rest ->
+              let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
+                  Address paymentCred _ = addr
+               in if paymentCred == progLogicCred
+                    then hasAtLeastAssetInProgOutputs reqQty (curQty + assetQtyInValue val cs tn) cs tn rest
+                    else hasAtLeastAssetInProgOutputs reqQty curQty cs tn rest
+          )
 
   multiAssetCheck expCsPairs =
     let actualValue = valueToCred progLogicCred txOutputs
      in checkAllExpectedCsPairs actualValue expCsPairs
 
-  checkAllExpectedCsPairs _ [] = True
-  checkAllExpectedCsPairs actual ((cs, tnPairs) : rest) =
-    checkAllExpectedTnPairs actual cs tnPairs && checkAllExpectedCsPairs actual rest
+  checkAllExpectedCsPairs actual xs =
+    Builtins.matchList xs (const True) $ \csPair rest ->
+      let cs = unsafeFromBuiltinData (BI.fst csPair) :: CurrencySymbol
+          tnPairs = BI.unsafeDataAsMap (BI.snd csPair)
+       in checkAllExpectedTnPairs actual cs tnPairs && checkAllExpectedCsPairs actual rest
 
-  checkAllExpectedTnPairs _ _ [] = True
-  checkAllExpectedTnPairs actual cs ((tn, qty) : rest) =
-    assetQtyInValue actual cs tn >= qty && checkAllExpectedTnPairs actual cs rest
-
--- ============================================================================
--- 9. Reference input lookup
--- ============================================================================
+  checkAllExpectedTnPairs :: Value -> CurrencySymbol -> BIPairs -> Bool
+  checkAllExpectedTnPairs actual cs tnPairs =
+    Builtins.matchList tnPairs (const True) $ \tnPair rest ->
+      let tn = unsafeFromBuiltinData (BI.fst tnPair) :: TokenName
+          qty = BI.unsafeDataAsI (BI.snd tnPair)
+       in assetQtyInValue actual cs tn >= qty && checkAllExpectedTnPairs actual cs rest
 
 {-# INLINEABLE findReferenceInputByCS #-}
-findReferenceInputByCS :: CurrencySymbol -> [TxInInfo] -> ProgrammableLogicGlobalParams
-findReferenceInputByCS _cs [] = traceError "protocol params not found"
-findReferenceInputByCS cs (TxInInfo _ txOut : rest) =
-  if hasCsFirstNonAdaOrFalse cs (txOutValue txOut)
-    then case txOutDatum txOut of
-      OutputDatum (Datum d) ->
-        case PlutusTx.fromBuiltinData d of
-          Just params -> params
-          Nothing -> traceError "protocol params datum decode failed"
-      _ -> traceError "protocol params datum missing"
-    else findReferenceInputByCS cs rest
+findReferenceInputByCS :: CurrencySymbol -> DList.List TxInInfo -> ProgrammableLogicGlobalParamsD
+findReferenceInputByCS cs refInputs =
+  go (dlistToBI refInputs)
+ where
+  go xs =
+    Builtins.matchList
+      xs
+      (const (traceError "protocol params not found"))
+      ( \inp rest ->
+          let TxInInfo _ txOut = unsafeFromBuiltinData inp
+              TxOut{txOutValue = val, txOutDatum = dat} = txOut
+           in if hasCsFirstNonAda cs val
+                then
+                  matchOutputDatum
+                    dat
+                    (traceError "protocol params datum missing")
+                    (\_ -> traceError "protocol params datum missing")
+                    (\(Datum d) -> unsafeFromBuiltinData d)
+                else go rest
+      )
 
 {-# INLINEABLE decodeDirectoryNode #-}
-decodeDirectoryNode :: TxOut -> DirectorySetNode
-decodeDirectoryNode txOut =
-  case txOutDatum txOut of
-    OutputDatum (Datum d) ->
-      case PlutusTx.fromBuiltinData d of
-        Just node -> node
-        Nothing -> traceError "directory node datum decode failed"
-    _ -> traceError "directory node datum missing"
-
--- ============================================================================
--- 10. Transfer logic validation
--- ============================================================================
+decodeDirectoryNode :: BI.BuiltinData -> DirectorySetNodeD
+decodeDirectoryNode txOutData =
+  let TxOut{txOutDatum = dat} = unsafeFromBuiltinData txOutData
+   in matchOutputDatum
+        dat
+        (traceError "directory node datum missing")
+        (\_ -> traceError "directory node datum missing")
+        (\(Datum d) -> unsafeFromBuiltinData d)
 
 {-# INLINEABLE checkTransferLogicAndGetProgrammableValue #-}
 checkTransferLogicAndGetProgrammableValue
   :: CurrencySymbol
-  -> [TxInInfo]
+  -> BIList
   -> [Integer]
-  -> [(Credential, Lovelace)]
+  -> DMap.Map Credential Lovelace
   -> Credential
   -> Value
   -> Value
-checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries initialCachedTransferScript totalValue =
-  let inputCsPairs = valueToSortedList totalValue
-   in sortedListToValue (go proofList inputCsPairs [] initialCachedTransferScript)
+checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl initialCachedTransferScript totalValue =
+  let inputCsPairs = DMap.toBuiltinList (getValue totalValue)
+   in Value (DMap.unsafeFromBuiltinList (biReversePairs (go proofList inputCsPairs nilPairs initialCachedTransferScript)))
  where
-  go :: [Integer] -> [(CurrencySymbol, [(TokenName, Integer)])] -> [(CurrencySymbol, [(TokenName, Integer)])] -> Credential -> [(CurrencySymbol, [(TokenName, Integer)])]
-  go _ [] acc _ = acc
-  go [] _ _ _ = traceError "transfer proof missing"
-  go (proofIdx : proofsRest) ((currCS, currTokens) : csPairsRest) acc cachedTransferScript =
-    let refInput = indexList refInputs proofIdx
-        dirNodeTxOut = txInInfoResolved refInput
-        dirNode = decodeDirectoryNode dirNodeTxOut
-        nodeKey = key dirNode
-        nodeNext = next dirNode
-        dirNodeTransferLogic = transferLogicScript dirNode
-     in if nodeKey < currCS
-          then
-            if currCS < nodeNext && hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
-              then go proofsRest csPairsRest acc cachedTransferScript
-              else traceError "dir neg-proof node must cover"
-          else
-            let transferScriptOk =
-                  dirNodeTransferLogic
-                    == cachedTransferScript
-                    || isScriptInvokedEntries dirNodeTransferLogic withdrawalEntries
-                keyMatch = nodeKey == currCS
-                validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
-             in if transferScriptOk && keyMatch && validDirNode
-                  then go proofsRest csPairsRest (appendList acc [(currCS, currTokens)]) dirNodeTransferLogic
-                  else
-                    if not transferScriptOk
-                      then traceError "Missing required transfer script"
-                      else
-                        if not keyMatch
-                          then traceError "directory proof mismatch"
-                          else traceError "invalid dir node"
-
--- ============================================================================
--- 11. Mint logic validation
--- ============================================================================
+  go :: [Integer] -> BIPairs -> BIPairs -> Credential -> BIPairs
+  go proofs csPairs acc cachedTransferScript =
+    Builtins.matchList csPairs (const acc) $ \currPair csPairsRest ->
+      case proofs of
+        [] -> traceError "transfer proof missing"
+        (proofIdx : proofsRest) ->
+          let currCS = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
+              TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
+              TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
+              dirNode = decodeDirectoryNode (toBuiltinData dirNodeTxOut)
+              nodeKey = keyD dirNode
+              nodeNext = nextD dirNode
+              dirNodeTransferLogic = transferLogicScriptD dirNode
+           in if nodeKey < currCS
+                then
+                  if currCS < nodeNext && hasCsFirstNonAda directoryNodeCS dirNodeValue
+                    then go proofsRest csPairsRest acc cachedTransferScript
+                    else traceError "dir neg-proof node must cover"
+                else
+                  let transferScriptOk =
+                        dirNodeTransferLogic
+                          == cachedTransferScript
+                          || isScriptInvoked dirNodeTransferLogic wdrl
+                      keyMatch = nodeKey == currCS
+                      validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
+                   in if transferScriptOk && keyMatch && validDirNode
+                        then go proofsRest csPairsRest (BI.mkCons currPair acc) dirNodeTransferLogic
+                        else
+                          if not transferScriptOk
+                            then traceError "Missing required transfer script"
+                            else
+                              if not keyMatch
+                                then traceError "directory proof mismatch"
+                                else traceError "invalid dir node"
 
 {-# INLINEABLE checkMintLogicAndGetProgrammableValue #-}
 checkMintLogicAndGetProgrammableValue
   :: CurrencySymbol
-  -> [TxInInfo]
+  -> BIList
   -> [Integer]
-  -> [(Credential, Lovelace)]
+  -> DMap.Map Credential Lovelace
   -> Value
   -> Value
-checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdrawalEntries totalMintValue =
-  let mintedEntries = valueToSortedList totalMintValue
-   in sortedListToValue (go proofList mintedEntries [])
+checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl totalMintValue =
+  let mintedEntries = DMap.toBuiltinList (getValue totalMintValue)
+   in Value (DMap.unsafeFromBuiltinList (biReversePairs (go proofList mintedEntries nilPairs)))
  where
-  go :: [Integer] -> [(CurrencySymbol, [(TokenName, Integer)])] -> [(CurrencySymbol, [(TokenName, Integer)])] -> [(CurrencySymbol, [(TokenName, Integer)])]
-  go proofs [] progMintValue =
-    case proofs of
-      [] -> progMintValue
-      _ -> traceError "extra mint proof"
-  go [] (_ : _) _ = traceError "mint proof missing"
-  go (proofIdx : proofsRest) ((mintCs, mintTokens) : mintRest) progMintValue =
-    let refInput = indexList refInputs proofIdx
-        dirNodeTxOut = txInInfoResolved refInput
-        dirNode = decodeDirectoryNode dirNodeTxOut
-        nodeKey = key dirNode
-        nodeNext = next dirNode
-        dirNodeTransferLogic = transferLogicScript dirNode
-     in if nodeKey == mintCs
-          then
-            let transferScriptOk = isScriptInvokedEntries dirNodeTransferLogic withdrawalEntries
-                validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
-             in if transferScriptOk && validDirNode
-                  then go proofsRest mintRest (appendList progMintValue [(mintCs, mintTokens)])
-                  else
-                    if not transferScriptOk
-                      then traceError "Missing required transfer script"
-                      else traceError "invalid dir node m"
-          else
-            let coverLower = nodeKey < mintCs
-                coverUpper = mintCs < nodeNext
-                validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
-             in if coverLower && coverUpper && validDirNode
-                  then go proofsRest mintRest progMintValue
-                  else traceError "dir mint neg-proof node must cover"
-
--- ============================================================================
--- 12. Redeemer types and offchain helpers
--- ============================================================================
--- (imported from SmartTokens.Contracts.ProgrammableLogicBase)
-
--- ============================================================================
--- 13. SeizeAct: value delta
--- ============================================================================
+  go :: [Integer] -> BIPairs -> BIPairs -> BIPairs
+  go proofs mintPairs progMintValue =
+    Builtins.matchList
+      mintPairs
+      ( const
+          ( case proofs of
+              [] -> progMintValue
+              _ -> traceError "extra mint proof"
+          )
+      )
+      ( \currPair mintRest ->
+          case proofs of
+            [] -> traceError "mint proof missing"
+            (proofIdx : proofsRest) ->
+              let mintCs = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
+                  TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
+                  TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
+                  dirNode = decodeDirectoryNode (toBuiltinData dirNodeTxOut)
+                  nodeKey = keyD dirNode
+                  nodeNext = nextD dirNode
+                  dirNodeTransferLogic = transferLogicScriptD dirNode
+               in if nodeKey == mintCs
+                    then
+                      let transferScriptOk = isScriptInvoked dirNodeTransferLogic wdrl
+                          validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
+                       in if transferScriptOk && validDirNode
+                            then go proofsRest mintRest (BI.mkCons currPair progMintValue)
+                            else
+                              if not transferScriptOk
+                                then traceError "Missing required transfer script"
+                                else traceError "invalid dir node m"
+                    else
+                      let coverLower = nodeKey < mintCs
+                          coverUpper = mintCs < nodeNext
+                          validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
+                       in if coverLower && coverUpper && validDirNode
+                            then go proofsRest mintRest progMintValue
+                            else traceError "dir mint neg-proof node must cover"
+      )
 
 {-# INLINEABLE valueEqualsDeltaCurrencySymbol #-}
-valueEqualsDeltaCurrencySymbol :: CurrencySymbol -> Value -> Value -> [(TokenName, Integer)]
+valueEqualsDeltaCurrencySymbol :: CurrencySymbol -> Value -> Value -> BIPairs
 valueEqualsDeltaCurrencySymbol progCS inputValue outputValue =
-  let innerInput = valueToSortedList inputValue
-      innerOutput = valueToSortedList outputValue
+  let innerInput = DMap.toBuiltinList (getValue inputValue)
+      innerOutput = DMap.toBuiltinList (getValue outputValue)
    in goOuter innerInput innerOutput
  where
-  goOuter
-    :: [(CurrencySymbol, [(TokenName, Integer)])]
-    -> [(CurrencySymbol, [(TokenName, Integer)])]
-    -> [(TokenName, Integer)]
-  goOuter [] _ = []
-  goOuter _ [] = []
-  goOuter ((inCS, inTokens) : inRest) ((outCS, outTokens) : outRest)
-    | inCS == outCS =
-        if inCS == progCS
-          then
-            if dataEqual
-              (sortedListToValue inRest)
-              (sortedListToValue outRest)
+  goOuter :: BIPairs -> BIPairs -> BIPairs
+  goOuter inPairs outPairs =
+    Builtins.matchList inPairs (const nilPairs) $ \inH inR ->
+      Builtins.matchList outPairs (const nilPairs) $ \outH outR ->
+        let inCS = unsafeFromBuiltinData (BI.fst inH) :: CurrencySymbol
+            outCS = unsafeFromBuiltinData (BI.fst outH) :: CurrencySymbol
+         in if inCS == outCS
               then
-                subtractTokens inTokens outTokens
+                if inCS == progCS
+                  then
+                    if dataEqual
+                      (Value (DMap.unsafeFromBuiltinList inR))
+                      (Value (DMap.unsafeFromBuiltinList outR))
+                      then
+                        biSubtractTokens (BI.unsafeDataAsMap (BI.snd inH)) (BI.unsafeDataAsMap (BI.snd outH))
+                      else
+                        error ()
+                  else
+                    if BI.snd inH == BI.snd outH
+                      then
+                        goOuter inR outR
+                      else
+                        error ()
               else
-                error ()
-          else
-            if dataEqual
-              (Map.unsafeFromList inTokens :: Map.Map TokenName Integer)
-              (Map.unsafeFromList outTokens :: Map.Map TokenName Integer)
-              then
-                goOuter inRest outRest
-              else
-                error ()
-    | dataEqual
-        (Map.unsafeFromList inTokens :: Map.Map TokenName Integer)
-        (Map.unsafeFromList outTokens :: Map.Map TokenName Integer) =
-        []
-    | otherwise = error ()
-
--- ============================================================================
--- 14. SeizeAct: processThirdPartyTransfer
--- ============================================================================
+                if BI.snd inH == BI.snd outH
+                  then nilPairs
+                  else error ()
 
 {-# INLINEABLE processThirdPartyTransfer #-}
 processThirdPartyTransfer
   :: CurrencySymbol
   -> Credential
-  -> [TxInInfo]
-  -> [TxOut]
+  -> BIList
+  -> BIList
   -> [Integer]
-  -> [(TokenName, Integer)]
+  -> BIPairs
   -> Bool
 processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputIdxs mintedTokens =
-  go inputIdxs inputs progOutputs []
+  go inputIdxs inputs progOutputs nilPairs
  where
-  go :: [Integer] -> [TxInInfo] -> [TxOut] -> [(TokenName, Integer)] -> Bool
-  go [] _remainingInputs remainingOutputs deltaAccumulator =
-    let finalDelta = tokenPairsUnion deltaAccumulator mintedTokens
-        outputAccumulator = accumulateProgOutputTokens remainingOutputs
-     in tokenPairsContain outputAccumulator finalDelta || error ()
-  go (relIdx : restIdxs) remainingInputs programmableOutputs deltaAccumulator =
-    let dropped = dropList relIdx remainingInputs
-     in case dropped of
-          [] -> traceError "input index out of bounds"
-          (TxInInfo _ programmableInputResolved : afterIdx) ->
-            checkCorrespondingPair programmableInputResolved restIdxs afterIdx programmableOutputs deltaAccumulator
+  progLogicCredData :: BI.BuiltinData
+  progLogicCredData = toBuiltinData progLogicCred
 
-  checkCorrespondingPair :: TxOut -> [Integer] -> [TxInInfo] -> [TxOut] -> [(TokenName, Integer)] -> Bool
+  go :: [Integer] -> BIList -> BIList -> BIPairs -> Bool
+  go [] _remainingInputs remainingOutputs deltaAccumulator =
+    let finalDelta = biTokenUnion deltaAccumulator mintedTokens
+        outputAccumulator = accumulateProgOutputTokens remainingOutputs
+     in biTokenPairsContain outputAccumulator finalDelta || error ()
+  go (relIdx : restIdxs) remainingInputs programmableOutputs deltaAccumulator =
+    let dropped = biDrop relIdx remainingInputs
+     in Builtins.matchList
+          dropped
+          (const (traceError "input index out of bounds"))
+          ( \programmableInputData afterIdx ->
+              let TxInInfo _ inputTxOut = unsafeFromBuiltinData programmableInputData
+               in checkCorrespondingPair inputTxOut restIdxs afterIdx programmableOutputs deltaAccumulator
+          )
+
+  checkCorrespondingPair :: TxOut -> [Integer] -> BIList -> BIList -> BIPairs -> Bool
   checkCorrespondingPair inputTxOut remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator =
-    let inputAddr = txOutAddress inputTxOut
-        inputCred = getPaymentCredential inputAddr
-     in if inputCred == progLogicCred
-          then case programmableOutputs of
-            [] -> traceError "no corresponding output"
-            (outputTxOut : outputsRest) ->
-              let outputAddr = txOutAddress outputTxOut
-                  addressMatch = inputAddr == outputAddr
-                  datumMatch = txOutDatum inputTxOut == txOutDatum outputTxOut
-                  refScriptMatch = txOutReferenceScript inputTxOut == txOutReferenceScript outputTxOut
-               in if addressMatch && datumMatch && refScriptMatch
-                    then
-                      let delta = valueEqualsDeltaCurrencySymbol programmableCS (txOutValue inputTxOut) (txOutValue outputTxOut)
-                       in go remainingIdxs remainingInputsAfterIdx outputsRest (tokenPairsUnion delta deltaAccumulator)
-                    else
-                      if not addressMatch
-                        then traceError "corresponding output: address mismatch"
-                        else traceError "corresponding output: datum/reference script mismatch"
+    let TxOut{txOutAddress = inputAddr, txOutValue = inputVal, txOutDatum = inputDat, txOutReferenceScript = inputRefScript} = inputTxOut
+        Address inputCred _ = inputAddr
+     in if toBuiltinData inputCred == progLogicCredData
+          then
+            Builtins.matchList
+              programmableOutputs
+              (const (traceError "no corresponding output"))
+              ( \outputTxOutData outputsRest ->
+                  let TxOut{txOutAddress = outputAddr, txOutValue = outputVal, txOutDatum = outputDat, txOutReferenceScript = outputRefScript} = unsafeFromBuiltinData outputTxOutData
+                   in if inputAddr == outputAddr && inputDat == outputDat && inputRefScript == outputRefScript
+                        then
+                          let delta = valueEqualsDeltaCurrencySymbol programmableCS inputVal outputVal
+                           in go remainingIdxs remainingInputsAfterIdx outputsRest (biTokenUnion delta deltaAccumulator)
+                        else
+                          if inputAddr /= outputAddr
+                            then traceError "corresponding output: address mismatch"
+                            else traceError "corresponding output: datum/reference script mismatch"
+              )
           else case inputCred of
             ScriptCredential _ -> go remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator
             _ -> traceError "input index points to pubkey input"
 
-  accumulateProgOutputTokens :: [TxOut] -> [(TokenName, Integer)]
-  accumulateProgOutputTokens [] = []
-  accumulateProgOutputTokens (txOut : rest) =
-    if getPaymentCredential (txOutAddress txOut) == progLogicCred
-      then tokenPairsUnion (tokensForCurrencySymbol programmableCS (txOutValue txOut)) (accumulateProgOutputTokens rest)
-      else accumulateProgOutputTokens rest
-
--- ============================================================================
--- 15. Redeemer map helpers
--- ============================================================================
+  accumulateProgOutputTokens :: BIList -> BIPairs
+  accumulateProgOutputTokens xs =
+    Builtins.matchList xs (const nilPairs) $ \txOutData rest ->
+      let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
+          Address paymentCred _ = addr
+       in if toBuiltinData paymentCred == progLogicCredData
+            then biTokenUnion (tokensForCurrencySymbol programmableCS val) (accumulateProgOutputTokens rest)
+            else accumulateProgOutputTokens rest
 
 {-# INLINEABLE enforceNSpendRedeemers #-}
-enforceNSpendRedeemers :: Integer -> Map.Map ScriptPurpose Redeemer -> Bool
+enforceNSpendRedeemers :: Integer -> DMap.Map ScriptPurpose Redeemer -> Bool
 enforceNSpendRedeemers n rdmrs =
-  let rdmrsList = Map.toList rdmrs
-      dropped = dropList (n - 1) rdmrsList
-   in case dropped of
-        [] -> False
-        ((purpose, _) : rest) ->
-          isSpendingPurpose purpose
-            && ( case rest of
-                   [] -> True
-                   ((nextPurpose, _) : _) -> not (isSpendingPurpose nextPurpose)
-               )
-
--- ============================================================================
--- 16. Base validator (mkProgrammableLogicBase)
--- ============================================================================
+  let bl = dropBuiltinList (n - 1) (DMap.toBuiltinList rdmrs)
+   in Builtins.matchList
+        bl
+        (const False)
+        ( \pair rest ->
+            isSpendingPurpose (unsafeFromBuiltinData (BI.fst pair))
+              && Builtins.matchList
+                rest
+                (const True)
+                (\nextPair _ -> not (isSpendingPurpose (unsafeFromBuiltinData (BI.fst nextPair))))
+        )
+ where
+  dropBuiltinList :: Integer -> BIPairs -> BIPairs
+  dropBuiltinList m xs
+    | m <= 0 = xs
+    | otherwise = Builtins.matchList xs (const xs) (\_ ys -> dropBuiltinList (m - 1) ys)
 
 {-# INLINEABLE mkProgrammableLogicBaseValidator #-}
 mkProgrammableLogicBaseValidator :: BuiltinData -> BuiltinData -> ()
@@ -585,19 +600,10 @@ mkProgrammableLogicBaseValidator stakeCredData ctxData =
       stakeCred = PlutusTx.unsafeFromBuiltinData stakeCredData
       ctx :: ScriptContext
       ctx = PlutusTx.unsafeFromBuiltinData ctxData
-      txInfo_ = scriptContextTxInfo ctx
-      wdrls = Map.toList (txInfoWdrl txInfo_)
-   in if hasCred stakeCred wdrls
+      TxInfo{txInfoWdrl = wdrl} = scriptContextTxInfo ctx
+   in if DMap.member stakeCred wdrl
         then ()
         else traceError "programmable global not invoked"
- where
-  hasCred :: Credential -> [(Credential, Lovelace)] -> Bool
-  hasCred _ [] = False
-  hasCred c ((c', _) : rest) = c == c' || hasCred c rest
-
--- ============================================================================
--- 17. Global validator (mkProgrammableLogicGlobal)
--- ============================================================================
 
 {-# INLINEABLE mkProgrammableLogicGlobalValidator #-}
 mkProgrammableLogicGlobalValidator :: BuiltinData -> BuiltinData -> ()
@@ -606,79 +612,95 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
       protocolParamsCS = PlutusTx.unsafeFromBuiltinData protocolParamsCsData
       ctx :: ScriptContext
       ctx = PlutusTx.unsafeFromBuiltinData ctxData
-      txInfo_ = scriptContextTxInfo ctx
-      scriptInfo_ = scriptContextScriptInfo ctx
-      redeemer_ = scriptContextRedeemer ctx
-      referenceInputs = txInfoReferenceInputs txInfo_
-      withdrawalEntries = Map.toList (txInfoWdrl txInfo_)
-
+      ScriptContext
+        { scriptContextTxInfo = txInfo_
+        , scriptContextScriptInfo = scriptInfo_
+        , scriptContextRedeemer = redeemer_
+        } = ctx
+      TxInfo
+        { txInfoInputs = inputs
+        , txInfoReferenceInputs = referenceInputs
+        , txInfoOutputs = outputs
+        , txInfoMint = mint
+        , txInfoWdrl = wdrl
+        , txInfoSignatories = sigs
+        , txInfoRedeemers = redeemers
+        } = txInfo_
       red :: ProgrammableLogicGlobalRedeemer
       red = PlutusTx.unsafeFromBuiltinData (getRedeemer redeemer_)
 
-      ProgrammableLogicGlobalParams{directoryNodeCS, progLogicCred} =
-        findReferenceInputByCS protocolParamsCS referenceInputs
+      params = findReferenceInputByCS protocolParamsCS referenceInputs
+      directoryNodeCS = directoryNodeCSD params
+      progLogicCred = progLogicCredD params
    in case red of
         TransferAct{plgrTransferProofs, plgrMintProofs} ->
-          let cachedTransferScript0 = case withdrawalEntries of
-                ((c, _) : _) -> c
-                [] -> traceError "no withdrawals"
+          let cachedTransferScript0 =
+                let bl = DMap.toBuiltinList wdrl
+                 in Builtins.matchList
+                      bl
+                      (const (traceError "no withdrawals"))
+                      (\first _ -> unsafeFromBuiltinData (BI.fst first))
 
               totalProgTokenValue =
                 valueFromCred
                   progLogicCred
-                  (txInfoSignatories txInfo_)
-                  withdrawalEntries
-                  (txInfoInputs txInfo_)
+                  sigs
+                  wdrl
+                  inputs
+
+              refInputsBIList = dlistToBI referenceInputs
 
               totalProgTokenValue_ =
                 checkTransferLogicAndGetProgrammableValue
                   directoryNodeCS
-                  referenceInputs
+                  refInputsBIList
                   plgrTransferProofs
-                  withdrawalEntries
+                  wdrl
                   cachedTransferScript0
                   totalProgTokenValue
 
-              mintValueAsValue = PlutusTx.unsafeFromBuiltinData (PlutusTx.toBuiltinData (txInfoMint txInfo_)) :: Value
-              mintCsPairs = valueToSortedList mintValueAsValue
+              mintValueAsValue = PlutusTx.unsafeFromBuiltinData (PlutusTx.toBuiltinData mint) :: Value
 
               expectedProgrammableOutputValue =
-                if isNullList mintCsPairs
+                if DMap.null (getValue mintValueAsValue)
                   then totalProgTokenValue_
                   else
                     let progMintValue =
                           checkMintLogicAndGetProgrammableValue
                             directoryNodeCS
-                            referenceInputs
+                            refInputsBIList
                             plgrMintProofs
-                            withdrawalEntries
+                            wdrl
                             mintValueAsValue
                      in valueUnion totalProgTokenValue_ progMintValue
            in if isRewardingScriptInfo scriptInfo_
                 && outputsContainExpectedValueAtCred
                   progLogicCred
-                  (txInfoOutputs txInfo_)
+                  outputs
                   expectedProgrammableOutputValue
                 then ()
                 else traceError "prog tokens escape"
         SeizeAct{plgrDirectoryNodeIdx, plgrInputIdxs, plgrOutputsStartIdx, plgrLengthInputIdxs} ->
           let inputIdxsLen = plgrLengthInputIdxs
-              remainingOutputs = dropList plgrOutputsStartIdx (txInfoOutputs txInfo_)
-              directoryNodeUTxO = indexList referenceInputs plgrDirectoryNodeIdx
-              dirNodeTxOut = txInInfoResolved directoryNodeUTxO
-              dirNode = decodeDirectoryNode dirNodeTxOut
+              outputsBIList = dlistToBI outputs
+              remainingOutputs = biDrop plgrOutputsStartIdx outputsBIList
+              refInputsBIList = dlistToBI referenceInputs
+              TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputsBIList plgrDirectoryNodeIdx)
+              TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
+              dirNode = decodeDirectoryNode (toBuiltinData dirNodeTxOut)
 
-              programmableCS = key dirNode
-              dirNodeIssuerLogic = issuerLogicScript dirNode
+              programmableCS = keyD dirNode
+              dirNodeIssuerLogic = issuerLogicScriptD dirNode
 
-              mintValueAsValue = PlutusTx.unsafeFromBuiltinData (PlutusTx.toBuiltinData (txInfoMint txInfo_)) :: Value
+              mintValueAsValue = PlutusTx.unsafeFromBuiltinData (PlutusTx.toBuiltinData mint) :: Value
               seizeMintedTokens = tokensForCurrencySymbol programmableCS mintValueAsValue
 
-              miniLedgerOk = processThirdPartyTransfer programmableCS progLogicCred (txInfoInputs txInfo_) remainingOutputs plgrInputIdxs seizeMintedTokens
-              issuerLogicOk = isScriptInvokedEntries dirNodeIssuerLogic withdrawalEntries
-              validDirNode = hasCsFirstNonAda directoryNodeCS (txOutValue dirNodeTxOut)
-              spendRedeemersOk = enforceNSpendRedeemers inputIdxsLen (txInfoRedeemers txInfo_)
-              inputIdxLenOk = listLength plgrInputIdxs == inputIdxsLen
+              inputsBIList = dlistToBI inputs
+              miniLedgerOk = processThirdPartyTransfer programmableCS progLogicCred inputsBIList remainingOutputs plgrInputIdxs seizeMintedTokens
+              issuerLogicOk = isScriptInvoked dirNodeIssuerLogic wdrl
+              validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
+              spendRedeemersOk = enforceNSpendRedeemers inputIdxsLen redeemers
+              inputIdxLenOk = biLength (BI.unsafeDataAsList (toBuiltinData plgrInputIdxs)) == inputIdxsLen
            in if miniLedgerOk && issuerLogicOk && validDirNode && spendRedeemersOk && inputIdxLenOk
                 then ()
                 else
@@ -691,10 +713,6 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
                           if not spendRedeemersOk
                             then traceError "spending redeemer count mismatch"
                             else traceError "input index length mismatch"
-
--- ============================================================================
--- 18. Compiled scripts
--- ============================================================================
 
 plinthProgrammableLogicBaseScript :: Script
 plinthProgrammableLogicBaseScript =

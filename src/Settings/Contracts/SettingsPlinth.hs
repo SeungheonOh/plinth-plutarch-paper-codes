@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -20,6 +21,9 @@ module Settings.Contracts.SettingsPlinth (
 
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
+import PlutusLedgerApi.V1.Data.Credential (matchCredential)
+import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound, matchUpperBound)
+import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI
@@ -52,7 +56,6 @@ import Settings.Types.SettingsState (
   pattern BeforeD,
   pattern ScriptWitD,
   pattern SettingsAdminUpdateD,
-  pattern SettingsDatumD,
   pattern SignatureD,
   pattern TreasuryAdminUpdateD,
  )
@@ -106,15 +109,13 @@ multisigSatisfied script signatories validRange wdrlMap =
     AtLeastD required scripts ->
       required <= listCount (\s -> multisigSatisfied s signatories validRange wdrlMap) scripts
     BeforeD time ->
-      case ivTo validRange of
-        UpperBound (Finite (POSIXTime hi)) isInclusive ->
-          if isInclusive then hi <= time else hi < time
-        _ -> False
+      matchInterval validRange $ \_lb ub ->
+        matchUpperBound ub $ \ext isInclusive ->
+          matchExtended ext False (\(POSIXTime hi) -> if isInclusive then hi <= time else hi < time) False
     AfterD time ->
-      case ivFrom validRange of
-        LowerBound (Finite (POSIXTime lo)) isInclusive ->
-          if isInclusive then time <= lo else time < lo
-        _ -> False
+      matchInterval validRange $ \lb _ub ->
+        matchLowerBound lb $ \ext isInclusive ->
+          matchExtended ext False (\(POSIXTime lo) -> if isInclusive then time <= lo else time < lo) False
     ScriptWitD scriptHash ->
       pairsHasKey (ScriptCredential (ScriptHash (getPubKeyHash scriptHash))) wdrlMap
 
@@ -123,19 +124,20 @@ multisigSatisfied script signatories validRange wdrlMap =
 -- ============================================================================
 
 {-# INLINEABLE findOwnInput #-}
-findOwnInput :: ScriptContext -> TxInInfo
-findOwnInput (ScriptContext txInfo _ (SpendingScript ref _)) =
-  case DList.find (\inp -> txInInfoOutRef inp == ref) (txInfoInputs txInfo) of
+findOwnInput :: TxOutRef -> DList.List TxInInfo -> TxInInfo
+findOwnInput ref inputs =
+  case DList.find (\inp -> txInInfoOutRef inp == ref) inputs of
     Just x -> x
     Nothing -> traceError "own input not found"
-findOwnInput _ = traceError "not spending"
 
 {-# INLINEABLE getOutputDatum #-}
 getOutputDatum :: TxOut -> SettingsDatumD
 getOutputDatum o =
-  case txOutDatum o of
-    OutputDatum (Datum d) -> unsafeFromBuiltinData d
-    _ -> traceError "no inline datum"
+  matchOutputDatum
+    (txOutDatum o)
+    (traceError "no inline datum")
+    (\_ -> traceError "no inline datum")
+    (\(Datum d) -> unsafeFromBuiltinData d)
 
 {-# INLINEABLE valueWithoutLovelace #-}
 valueWithoutLovelace :: Value -> Value
@@ -159,15 +161,10 @@ listAnyInput = DList.any
 -- ============================================================================
 
 {-# INLINEABLE checkSettingsAdminUpdate #-}
-checkSettingsAdminUpdate :: SettingsDatumD -> SettingsDatumD -> TxInfo -> Bool
-checkSettingsAdminUpdate inputDatum outputDatum tx =
+checkSettingsAdminUpdate :: SettingsDatumD -> SettingsDatumD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
+checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl =
   let admin = unsafeFromBuiltinData @MultisigScriptD (sdSettingsAdminD inputDatum)
-      signedByAdmin =
-        multisigSatisfied
-          admin
-          (txInfoSignatories tx)
-          (txInfoValidRange tx)
-          (txInfoWdrl tx)
+      signedByAdmin = multisigSatisfied admin sigs validRange wdrl
       stakingKeysUnchanged = sdAuthorizedStakingKeysD inputDatum == sdAuthorizedStakingKeysD outputDatum
       treasuryAddrUnchanged = sdTreasuryAddressD inputDatum == sdTreasuryAddressD outputDatum
       treasuryAllowUnchanged = sdTreasuryAllowanceD inputDatum == sdTreasuryAllowanceD outputDatum
@@ -181,15 +178,10 @@ checkSettingsAdminUpdate inputDatum outputDatum tx =
 -- ============================================================================
 
 {-# INLINEABLE checkTreasuryAdminUpdate #-}
-checkTreasuryAdminUpdate :: SettingsDatumD -> SettingsDatumD -> TxInfo -> Bool
-checkTreasuryAdminUpdate inputDatum outputDatum tx =
+checkTreasuryAdminUpdate :: SettingsDatumD -> SettingsDatumD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
+checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl =
   let admin = unsafeFromBuiltinData @MultisigScriptD (sdTreasuryAdminD inputDatum)
-      signedByAdmin =
-        multisigSatisfied
-          admin
-          (txInfoSignatories tx)
-          (txInfoValidRange tx)
-          (txInfoWdrl tx)
+      signedByAdmin = multisigSatisfied admin sigs validRange wdrl
       settingsAdminUnchanged = sdSettingsAdminD inputDatum == sdSettingsAdminD outputDatum
       metadataAdminUnchanged = sdMetadataAdminD inputDatum == sdMetadataAdminD outputDatum
       treasuryAdminUnchanged = sdTreasuryAdminD inputDatum == sdTreasuryAdminD outputDatum
@@ -215,25 +207,24 @@ checkTreasuryAdminUpdate inputDatum outputDatum tx =
 -- ============================================================================
 
 {-# INLINEABLE settingsValidator #-}
-settingsValidator :: SettingsDatumD -> SettingsRedeemerD -> ScriptContext -> Bool
-settingsValidator inputDatum redeemer ctx =
-  let tx = scriptContextTxInfo ctx
-      ownInput = findOwnInput ctx
+settingsValidator :: SettingsDatumD -> SettingsRedeemerD -> TxOutRef -> TxInfo -> Bool
+settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoMint = mint, txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoWdrl = wdrl} =
+  let ownInput = findOwnInput ownRef inputs
       ownAddress = txOutAddress (txInInfoResolved ownInput)
       ownInputValue = txOutValue (txInInfoResolved ownInput)
-      ownOutput = listHeadOutput (txInfoOutputs tx)
+      ownOutput = listHeadOutput outputs
       ownOutputAddress = txOutAddress ownOutput
       ownOutputValue = txOutValue ownOutput
       outputDatum = getOutputDatum ownOutput
       valueNotChanged = valueWithoutLovelace ownOutputValue == valueWithoutLovelace ownInputValue
-      noMint = valueIsZero (txInfoMint tx)
+      noMint = valueIsZero mint
    in ownOutputAddress
         == ownAddress
         && valueNotChanged
         && noMint
         && case redeemer of
-          SettingsAdminUpdateD -> checkSettingsAdminUpdate inputDatum outputDatum tx
-          TreasuryAdminUpdateD -> checkTreasuryAdminUpdate inputDatum outputDatum tx
+          SettingsAdminUpdateD -> checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
+          TreasuryAdminUpdateD -> checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
 
 -- ============================================================================
 -- 7. Mint validator
@@ -276,25 +267,30 @@ findSettingsOutput :: CurrencySymbol -> DList.List TxOut -> Bool
 findSettingsOutput ownPolicyId =
   DList.any
     ( \o ->
-        case addressCredential (txOutAddress o) of
-          ScriptCredential sh ->
-            sh
-              == ScriptHash (unCurrencySymbol ownPolicyId)
-              && case txOutDatum o of
-                OutputDatum _ -> True
-                _ -> False
-          _ -> False
+        matchCredential
+          (addressCredential (txOutAddress o))
+          (\_ -> False)
+          ( \sh ->
+              sh
+                == ScriptHash (unCurrencySymbol ownPolicyId)
+                && matchOutputDatum
+                  (txOutDatum o)
+                  False
+                  (\_ -> False)
+                  (\_ -> True)
+          )
     )
 
 {-# INLINEABLE settingsMintValidator #-}
 settingsMintValidator :: TxOutRef -> CurrencySymbol -> TxInfo -> Bool
 settingsMintValidator bootUtxo ownPolicyId tx =
-  let mintsExactlyOne =
-        mintsExactlyOneToken ownPolicyId (TokenName "settings") (txInfoMint tx)
+  let TxInfo{txInfoMint = mint, txInfoInputs = inputs, txInfoOutputs = outputs} = tx
+      mintsExactlyOne =
+        mintsExactlyOneToken ownPolicyId (TokenName "settings") mint
       spendsBootUtxo =
-        listAnyInput (\inp -> txInInfoOutRef inp == bootUtxo) (txInfoInputs tx)
+        listAnyInput (\inp -> txInInfoOutRef inp == bootUtxo) inputs
       paysToSettingsScript =
-        findSettingsOutput ownPolicyId (txInfoOutputs tx)
+        findSettingsOutput ownPolicyId outputs
    in mintsExactlyOne
         && spendsBootUtxo
         && paysToSettingsScript
@@ -307,14 +303,15 @@ settingsMintValidator bootUtxo ownPolicyId tx =
 mkSettingsValidator :: BuiltinData -> BuiltinData -> ()
 mkSettingsValidator bootUtxoData ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-   in case scriptContextScriptInfo ctx of
-        SpendingScript _ (Just (Datum datumData)) ->
+      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+   in case scriptInfo of
+        SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @SettingsDatumD datumData
-              redeemer = unsafeFromBuiltinData @SettingsRedeemerD (getRedeemer (scriptContextRedeemer ctx))
-           in if settingsValidator datum redeemer ctx then () else error ()
+              red = unsafeFromBuiltinData @SettingsRedeemerD (getRedeemer redeemer)
+           in if settingsValidator datum red ownRef txInfo then () else error ()
         MintingScript ownPolicyId ->
           let bootUtxo = unsafeFromBuiltinData @TxOutRef bootUtxoData
-           in if settingsMintValidator bootUtxo ownPolicyId (scriptContextTxInfo ctx) then () else error ()
+           in if settingsMintValidator bootUtxo ownPolicyId txInfo then () else error ()
         _ -> error ()
 
 plinthSettingsScript :: Script

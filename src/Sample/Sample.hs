@@ -11,10 +11,6 @@ import GHC.Generics (Generic)
 import Generics.SOP qualified as SOP
 import Plutarch.Prelude hiding (PCons, PList, PNil)
 
--- ============================================================================
--- 1. Data-encoded Maybe
--- ============================================================================
-
 data PMaybeData (a :: S -> Type) (s :: S)
   = PDNothing
   | PDJust (Term s (PAsData a))
@@ -22,20 +18,12 @@ data PMaybeData (a :: S -> Type) (s :: S)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
   deriving (PlutusType) via (DeriveAsDataStruct (PMaybeData a))
 
--- ============================================================================
--- 2. SOP-encoded List
--- ============================================================================
-
 data PList (a :: S -> Type) (s :: S)
   = PNil
   | PCons (Term s a) (Term s (PList a))
   deriving stock (Generic)
   deriving anyclass (SOP.Generic)
   deriving (PlutusType) via (DeriveAsSOPStruct (PList a))
-
--- ============================================================================
--- 3. Functions
--- ============================================================================
 
 pfromMaybeData :: (PIsData a) => Term s (a :--> PMaybeData a :--> a)
 pfromMaybeData = phoistAcyclic $ plam $ \def mx ->
