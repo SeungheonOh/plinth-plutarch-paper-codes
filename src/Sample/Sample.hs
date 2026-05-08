@@ -13,7 +13,7 @@ data PWithdraw s
   | PDeduct (Term s (PAsData PInteger)) (Term s (PAsData PWithdraw))
   deriving stock (Generic)
   deriving anyclass (SOP.Generic, PIsData)
-  deriving PlutusType via DeriveAsDataStruct PWithdraw
+  deriving (PlutusType) via DeriveAsDataStruct PWithdraw
 
 netWithdraw :: Term s (PWithdraw :--> PInteger)
 netWithdraw = pfix #$ plam $ \self wt -> pmatch wt $ \w ->

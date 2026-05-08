@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Data.List (foldl', intercalate)
+import Data.List (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Language.Haskell.Exts as HSE
@@ -35,6 +35,9 @@ sectionLabel SDerivingDeclarations = "Deriving declarations"
 sectionLabel STemplateHaskell = "Template Haskell"
 sectionLabel SComments = "Comments"
 sectionLabel SOther = "Other"
+
+boilerplateSections :: [Section]
+boilerplateSections = [SPragmas, SModuleHead, SImports, SComments]
 
 data Metrics = Metrics
   { mLines :: !Int
@@ -73,16 +76,25 @@ classifyComment _ = SComments
 data FileMetrics = FileMetrics
   { fmFile :: String
   , fmTotalLines :: Int
+  , fmBlankLines :: Int
   , fmSections :: SectionMap
   , fmTopBindings :: Int
   , fmPragmaLines :: Int
   }
 
+elocOf :: FileMetrics -> Int
+elocOf FileMetrics{..} =
+  fmTotalLines
+    - fmBlankLines
+    - sum [mLines (getMetrics s fmSections) | s <- boilerplateSections]
+
 analyzeFile :: FilePath -> IO FileMetrics
 analyzeFile path = do
   rawContents <- readFile path
   let contents = preprocessSource rawContents
-      totalLines = length (lines rawContents)
+      rawLines = lines rawContents
+      totalLines = length rawLines
+      blankLines = length (filter (all (== ' ')) rawLines)
 
       mode =
         defaultParseMode
@@ -129,36 +141,37 @@ analyzeFile path = do
     ParseFailed loc msg ->
       error $ "Parse failed at " ++ show loc ++ ": " ++ msg
     ParseOk (Module _ mhead pragmaList importList decls, comments) -> do
-      let pragmaMetrics = foldl' (\acc p -> addToMap SPragmas (pragmaLines p) acc) Map.empty pragmaList
+      let pragmaMetrics = foldl' (\acc p -> addToMap SPragmas (pragmaLns p) acc) Map.empty pragmaList
           headMetrics = case mhead of
             Just (HSE.ModuleHead l _ _ _) -> addToMap SModuleHead (declLines l) pragmaMetrics
             Nothing -> pragmaMetrics
           importMetrics = foldl' (\acc (ImportDecl l _ _ _ _ _ _ _) -> addToMap SImports (declLines l) acc) headMetrics importList
           declMetrics = foldl' (\acc d -> addToMap (classifyDecl d) (declDeclLines d) acc) importMetrics decls
-          commentMetrics = foldl' (\acc c -> addToMap (classifyComment c) (commentLines c) acc) declMetrics comments
+          commentMetrics = foldl' (\acc c -> addToMap (classifyComment c) (commentLns c) acc) declMetrics comments
           topBinds = countTopBindings decls
       return
         FileMetrics
           { fmFile = takeFileName path
           , fmTotalLines = totalLines
+          , fmBlankLines = blankLines
           , fmSections = commentMetrics
           , fmTopBindings = topBinds
-          , fmPragmaLines = sum [pragmaLines p | p <- pragmaList]
+          , fmPragmaLines = sum [pragmaLns p | p <- pragmaList]
           }
     ParseOk _ ->
       error $ "Unexpected parse result for " ++ path ++ " (not a Module)"
 
-pragmaLines :: ModulePragma SrcSpanInfo -> Int
-pragmaLines (LanguagePragma l _) = declLines l
-pragmaLines (OptionsPragma l _ _) = declLines l
-pragmaLines (AnnModulePragma l _) = declLines l
+pragmaLns :: ModulePragma SrcSpanInfo -> Int
+pragmaLns (LanguagePragma l _) = declLines l
+pragmaLns (OptionsPragma l _ _) = declLines l
+pragmaLns (AnnModulePragma l _) = declLines l
 
 declDeclLines :: Decl SrcSpanInfo -> Int
 declDeclLines d = case ann d of
   l -> declLines l
 
-commentLines :: Comment -> Int
-commentLines (Comment _ (SrcSpan _ sl _ el _) _) = el - sl + 1
+commentLns :: Comment -> Int
+commentLns (Comment _ (SrcSpan _ sl _ el _) _) = el - sl + 1
 
 addToMap :: Section -> Int -> SectionMap -> SectionMap
 addToMap section lns = Map.insertWith addMetrics section (Metrics lns 1)
@@ -226,11 +239,6 @@ allSections =
 getMetrics :: Section -> SectionMap -> Metrics
 getMetrics s m = Map.findWithDefault emptyMetrics s m
 
-pad :: Int -> String -> String
-pad n s = s ++ replicate (max 0 (n - length s)) ' '
-
-rpad :: Int -> String -> String
-rpad n s = replicate (max 0 (n - length s)) ' ' ++ s
 
 data ScriptPair = ScriptPair
   { spName :: String
@@ -242,20 +250,35 @@ data ScriptPair = ScriptPair
 allScriptPairs :: [ScriptPair]
 allScriptPairs =
   [ ScriptPair
-      "CIP-143 ProgrammableLogicBase"
+      "Smart Tokens"
       "src/SmartTokens/Contracts/ProgrammableLogicBase.hs"
       "src/SmartTokens/Contracts/ProgrammableLogicBasePlinth.hs"
       (Just "src/SmartTokens/Types/ProgrammableLogicGlobal.hs")
   , ScriptPair
-      "Hydra Head Validator"
+      "Guardrail"
+      "src/Constitution/Contracts/ConstitutionSorted.hs"
+      "src/Constitution/Contracts/ConstitutionSortedPlinth.hs"
+      (Just "src/Constitution/Types/ConstitutionConfig.hs")
+  , ScriptPair
+      "Crowdfund"
+      "src/Crowdfund/Contracts/Crowdfund.hs"
+      "src/Crowdfund/Contracts/CrowdfundPlinth.hs"
+      (Just "src/Crowdfund/Types/CrowdfundState.hs")
+  , ScriptPair
+      "Vesting"
+      "src/Vesting/Contracts/Vesting.hs"
+      "src/Vesting/Contracts/VestingPlinth.hs"
+      (Just "src/Vesting/Types/VestingState.hs")
+  , ScriptPair
+      "Hydra Head"
       "src/Hydra/Contracts/Head.hs"
       "src/Hydra/Contracts/HeadPlinth.hs"
       (Just "src/Hydra/Types/HeadState.hs")
   , ScriptPair
-      "Constitution Sorted Validator"
-      "src/Constitution/Contracts/ConstitutionSorted.hs"
-      "src/Constitution/Contracts/ConstitutionSortedPlinth.hs"
-      (Just "src/Constitution/Types/ConstitutionConfig.hs")
+      "Settings"
+      "src/Settings/Contracts/Settings.hs"
+      "src/Settings/Contracts/SettingsPlinth.hs"
+      (Just "src/Settings/Types/SettingsState.hs")
   ]
 
 printComparison :: ScriptPair -> IO ()
@@ -263,110 +286,79 @@ printComparison ScriptPair{..} = do
   pm <- analyzeFile spPlutarchPath
   tm <- analyzeFile spPlinthPath
 
+  let pEloc = elocOf pm
+      tEloc = elocOf tm
+
   putStrLn ""
-  putStrLn $ "Code Size Comparison: " ++ spName
-  putStrLn (replicate 105 '=')
-  printf
-    "  %-24s | %8s %6s | %8s %6s | %8s\n"
-    ("Section" :: String)
-    ("lines" :: String)
-    ("decls" :: String)
-    ("lines" :: String)
-    ("decls" :: String)
-    ("line ratio" :: String)
-  printf
-    "  %-24s | %8s %6s | %8s %6s | %8s\n"
-    ("" :: String)
-    ("Plutarch" :: String)
-    ("" :: String)
-    ("Plinth" :: String)
-    ("" :: String)
-    ("Pl/Pa" :: String)
-  putStrLn (replicate 105 '-')
+  putStrLn $ "=== " ++ spName ++ " ==="
+  putStrLn ""
 
-  let printRow section = do
-        let Metrics pLines pCount = getMetrics section (fmSections pm)
-            Metrics tLines tCount = getMetrics section (fmSections tm)
-            ratio :: String
-            ratio
-              | pLines > 0 = printf "%.2fx" (fromIntegral tLines / fromIntegral pLines :: Double)
-              | tLines > 0 = "N/A"
-              | otherwise = "-"
-        printf
-          "  %-24s | %8d %6d | %8d %6d | %8s\n"
-          (sectionLabel section)
-          pLines
-          pCount
-          tLines
-          tCount
-          ratio
+  printf "  %-14s  %8s  %8s  %8s\n"
+    ("" :: String) ("Plutarch" :: String) ("Plinth" :: String) ("ratio" :: String)
+  putStrLn (replicate 50 '-')
+  printf "  %-14s  %8d  %8d  %8s\n"
+    ("eLOC" :: String) pEloc tEloc
+    (ratioStr tEloc pEloc)
+  printf "  %-14s  %8d  %8d\n"
+    ("Total lines" :: String) (fmTotalLines pm) (fmTotalLines tm)
+  printf "  %-14s  %8d  %8d\n"
+    ("Blank lines" :: String) (fmBlankLines pm) (fmBlankLines tm)
+  putStrLn ""
 
-  mapM_ printRow allSections
+  putStrLn "  Breakdown (lines):"
+  printf "    %-24s  %8s  %8s\n"
+    ("Section" :: String) ("Plutarch" :: String) ("Plinth" :: String)
+  putStrLn (replicate 50 '-')
+  mapM_
+    ( \section -> do
+        let Metrics pLines _ = getMetrics section (fmSections pm)
+            Metrics tLines _ = getMetrics section (fmSections tm)
+        printf "    %-24s  %8d  %8d\n"
+          (sectionLabel section) pLines tLines
+    )
+    allSections
 
-  putStrLn (replicate 105 '-')
-
-  let pTotal = fmTotalLines pm
-      tTotal = fmTotalLines tm
-      totalRatio = printf "%.2fx" (fromIntegral tTotal / fromIntegral pTotal :: Double) :: String
-  printf
-    "  %-24s | %8d        | %8d        | %8s\n"
-    ("TOTAL" :: String)
-    pTotal
-    tTotal
-    totalRatio
-
-  putStrLn (replicate 105 '=')
-  printf
-    "  Top-level bindings:  Plutarch = %d,  Plinth = %d\n"
-    (fmTopBindings pm)
-    (fmTopBindings tm)
+  putStrLn ""
+  printf "  Top-level bindings:  Plutarch = %d,  Plinth = %d\n"
+    (fmTopBindings pm) (fmTopBindings tm)
 
   case spTypesPath of
     Just typesPath -> do
       typesMetrics <- analyzeFile typesPath
-      printf
-        "  Shared types module:  %s  (%d lines, %d top-level bindings)\n"
-        (takeFileName typesPath)
-        (fmTotalLines typesMetrics)
-        (fmTopBindings typesMetrics)
+      printf "  Shared types module:  %s  (%d eLOC, %d total lines)\n"
+        (takeFileName typesPath) (elocOf typesMetrics) (fmTotalLines typesMetrics)
     Nothing -> pure ()
 
   putStrLn ""
 
+ratioStr :: Int -> Int -> String
+ratioStr num denom
+  | denom > 0 = printf "%.2fx" (fromIntegral num / fromIntegral denom :: Double)
+  | num > 0 = "N/A"
+  | otherwise = "-"
+
 printSummary :: [(String, FileMetrics, FileMetrics)] -> IO ()
 printSummary pairs = do
-  putStrLn "Summary: All Scripts"
-  putStrLn (replicate 80 '=')
-  printf
-    "  %-34s | %8s | %8s | %8s\n"
-    ("Script" :: String)
-    ("Plutarch" :: String)
-    ("Plinth" :: String)
-    ("ratio" :: String)
-  putStrLn (replicate 80 '-')
+  putStrLn ""
+  putStrLn "Summary: eLOC (effective lines of code)"
+  putStrLn (replicate 62 '=')
+  printf "  %-24s | %8s | %8s | %8s\n"
+    ("Validator" :: String) ("Plutarch" :: String) ("Plinth" :: String) ("ratio" :: String)
+  putStrLn (replicate 62 '-')
   mapM_
-    ( \(name, pm, tm) -> do
-        let pTotal = fmTotalLines pm
-            tTotal = fmTotalLines tm
-            ratio = printf "%.2fx" (fromIntegral tTotal / fromIntegral pTotal :: Double) :: String
-        printf
-          "  %-34s | %8d | %8d | %8s\n"
-          name
-          pTotal
-          tTotal
-          ratio
+    ( \(n, pm, tm) -> do
+        let pEloc = elocOf pm
+            tEloc = elocOf tm
+        printf "  %-24s | %8d | %8d | %8s\n"
+          n pEloc tEloc (ratioStr tEloc pEloc)
     )
     pairs
-  putStrLn (replicate 80 '=')
-  let totalP = sum [fmTotalLines pm | (_, pm, _) <- pairs]
-      totalT = sum [fmTotalLines tm | (_, _, tm) <- pairs]
-      totalRatio = printf "%.2fx" (fromIntegral totalT / fromIntegral totalP :: Double) :: String
-  printf
-    "  %-34s | %8d | %8d | %8s\n"
-    ("TOTAL" :: String)
-    totalP
-    totalT
-    totalRatio
+  putStrLn (replicate 62 '-')
+  let totalP = sum [elocOf pm | (_, pm, _) <- pairs]
+      totalT = sum [elocOf tm | (_, _, tm) <- pairs]
+  printf "  %-24s | %8d | %8d | %8s\n"
+    ("TOTAL" :: String) totalP totalT (ratioStr totalT totalP)
+  putStrLn (replicate 62 '=')
   putStrLn ""
 
 main :: IO ()
