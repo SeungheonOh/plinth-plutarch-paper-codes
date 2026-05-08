@@ -52,6 +52,8 @@ library
   import:          base, project-config
   hs-source-dirs:  src
   exposed-modules:
+    Certifying.Contracts.Certifying
+    Certifying.Contracts.CertifyingPlinth
     Constitution.Contracts.ConstitutionSorted
     Constitution.Contracts.ConstitutionSortedPlinth
     Constitution.Types.ConstitutionConfig
@@ -76,6 +78,8 @@ library
     Vesting.Contracts.Vesting
     Vesting.Contracts.VestingPlinth
     Vesting.Types.VestingState
+    Voting.Contracts.Voting
+    Voting.Contracts.VotingPlinth
 
   build-depends:
     , generics-sop
@@ -96,12 +100,14 @@ executable bench-scripts
     -Wno-missing-export-lists
 
   other-modules:
+    Certifying.Test.Certifying
     Constitution.Test.ConstitutionSorted
     Crowdfund.Test.Crowdfund
     Hydra.Test.Head
     ProgrammableTokens.Test.ScriptContext.Builder
     Settings.Test.Settings
     Vesting.Test.Vesting
+    Voting.Test.Voting
 
   build-depends:
     , bytestring
@@ -128,6 +134,7 @@ test-suite conformance-tests
     -Wno-missing-export-lists
 
   other-modules:
+    Certifying.Test.Certifying
     Constitution.Test.ConstitutionSorted
     Crowdfund.Test.Crowdfund
     Hydra.Test.Head
@@ -135,6 +142,7 @@ test-suite conformance-tests
     ProgrammableTokens.Test.ScriptContext.Builder
     Settings.Test.Settings
     Vesting.Test.Vesting
+    Voting.Test.Voting
 
   build-depends:
     , bytestring

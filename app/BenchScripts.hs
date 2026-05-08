@@ -4,6 +4,9 @@
 
 module Main where
 
+import Certifying.Contracts.Certifying (mkCertifyingValidator)
+import Certifying.Contracts.CertifyingPlinth (plinthCertifyingScript)
+import Certifying.Test.Certifying qualified as Certifying
 import Codec.Extras.SerialiseViaFlat (SerialiseViaFlat (..))
 import Codec.Serialise (serialise)
 import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
@@ -54,6 +57,9 @@ import UntypedPlutusCore qualified as UPLC
 import Vesting.Contracts.Vesting (mkVestingValidator)
 import Vesting.Contracts.VestingPlinth (plinthVestingScript)
 import Vesting.Test.Vesting qualified as Vesting
+import Voting.Contracts.Voting (mkVotingValidator)
+import Voting.Contracts.VotingPlinth (plinthVotingScript)
+import Voting.Test.Voting qualified as Voting
 
 plutarchHeadScript :: Script
 plutarchHeadScript = compileNoTracing mkHeadValidator
@@ -69,6 +75,12 @@ plutarchSettingsScript = compileNoTracing mkSettingsValidator
 
 plutarchVestingScript :: Script
 plutarchVestingScript = compileNoTracing mkVestingValidator
+
+plutarchCertifyingScript :: Script
+plutarchCertifyingScript = compileNoTracing mkCertifyingValidator
+
+plutarchVotingScript :: Script
+plutarchVotingScript = compileNoTracing mkVotingValidator
 
 scriptSize :: Script -> Int
 scriptSize (Script prog) = fromIntegral $ LBS.length $ serialise $ SerialiseViaFlat $ UPLC.UnrestrictedProgram prog
@@ -128,6 +140,22 @@ main = do
   putStrLn (replicate 140 '=')
   printHeader
   mapM_ (runVestingComparison plutarchVestingScript plinthVestingScript) Vesting.vestingBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Certifying Validator -- Execution Cost Comparison"
+  printSizes "Certifying" plutarchCertifyingScript plinthCertifyingScript
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runCertifyingComparison plutarchCertifyingScript plinthCertifyingScript) Certifying.certifyingBenchScenarios
+  putStrLn (replicate 140 '=')
+
+  putStrLn ""
+  putStrLn "Voting Validator -- Execution Cost Comparison"
+  printSizes "Voting" plutarchVotingScript plinthVotingScript
+  putStrLn (replicate 140 '=')
+  printHeader
+  mapM_ (runVotingComparison plutarchVotingScript plinthVotingScript) Voting.votingBenchScenarios
   putStrLn (replicate 140 '=')
 
 renderScript :: Script -> String
@@ -262,6 +290,40 @@ runVestingComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runVestingComparison plutarchS plinthS (name, ctx) = do
   let (okP, cpuP, memP) = evalHeadWith plutarchS ctx
       (okT, cpuT, memT) = evalHeadWith plinthS ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+evalCertifyingWith :: Script -> Integer -> ScriptContext -> (Bool, String, String)
+evalCertifyingWith script expiration ctx =
+  let applied = applyArguments script [PlutusTx.toData expiration, PlutusTx.toData ctx]
+      (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
+      ok = isRight res
+   in (ok, show cpu, show mem)
+
+runCertifyingComparison :: Script -> Script -> (String, Integer, ScriptContext) -> IO ()
+runCertifyingComparison plutarchS plinthS (name, expiration, ctx) = do
+  let (okP, cpuP, memP) = evalCertifyingWith plutarchS expiration ctx
+      (okT, cpuT, memT) = evalCertifyingWith plinthS expiration ctx
+      statusP = if okP then "OK" else "FAIL" :: String
+      statusT = if okT then "OK" else "FAIL" :: String
+      cpuR = ratioStr cpuP cpuT
+      memR = ratioStr memP memT
+  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+
+evalVotingWith :: Script -> CurrencySymbol -> TokenName -> ScriptContext -> (Bool, String, String)
+evalVotingWith script cs tn ctx =
+  let applied = applyArguments script [PlutusTx.toData cs, PlutusTx.toData tn, PlutusTx.toData ctx]
+      (res, ExBudget (ExCPU cpu) (ExMemory mem), _logs) = evalScript applied
+      ok = isRight res
+   in (ok, show cpu, show mem)
+
+runVotingComparison :: Script -> Script -> (String, CurrencySymbol, TokenName, ScriptContext) -> IO ()
+runVotingComparison plutarchS plinthS (name, cs, tn, ctx) = do
+  let (okP, cpuP, memP) = evalVotingWith plutarchS cs tn ctx
+      (okT, cpuT, memT) = evalVotingWith plinthS cs tn ctx
       statusP = if okP then "OK" else "FAIL" :: String
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT

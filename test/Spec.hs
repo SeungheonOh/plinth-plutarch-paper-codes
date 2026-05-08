@@ -5,6 +5,9 @@ module Main (main) where
 import Plutarch.Internal.Term (Config (NoTracing), compile)
 import Plutarch.Script (Script)
 
+import Certifying.Contracts.Certifying (mkCertifyingValidator)
+import Certifying.Contracts.CertifyingPlinth (plinthCertifyingScript)
+import Certifying.Test.Certifying qualified as Certifying
 import Constitution.Contracts.ConstitutionSorted (mkConstitutionValidator)
 import Constitution.Contracts.ConstitutionSortedPlinth (plinthConstitutionScript)
 import Constitution.Test.ConstitutionSorted qualified as ConstitutionSorted
@@ -24,6 +27,9 @@ import Test.Tasty (defaultMain, testGroup)
 import Vesting.Contracts.Vesting (mkVestingValidator)
 import Vesting.Contracts.VestingPlinth (plinthVestingScript)
 import Vesting.Test.Vesting qualified as Vesting
+import Voting.Contracts.Voting (mkVotingValidator)
+import Voting.Contracts.VotingPlinth (plinthVotingScript)
+import Voting.Test.Voting qualified as Voting
 
 plutarchGlobalScript :: Script
 plutarchGlobalScript =
@@ -48,6 +54,14 @@ plutarchSettingsScript =
 plutarchVestingScript :: Script
 plutarchVestingScript =
   either (error . ("compile failed: " <>) . show) id (compile NoTracing mkVestingValidator)
+
+plutarchCertifyingScript :: Script
+plutarchCertifyingScript =
+  either (error . ("compile failed: " <>) . show) id (compile NoTracing mkCertifyingValidator)
+
+plutarchVotingScript :: Script
+plutarchVotingScript =
+  either (error . ("compile failed: " <>) . show) id (compile NoTracing mkVotingValidator)
 
 main :: IO ()
 main =
@@ -88,5 +102,17 @@ main =
           [ Vesting.mkVestingTests "Plutarch" plutarchVestingScript
           , Vesting.mkVestingTests "Plinth (PlutusTx)" plinthVestingScript
           , Vesting.mkVestingConformanceTests plutarchVestingScript plinthVestingScript
+          ]
+      , testGroup
+          "Certifying Validator"
+          [ Certifying.mkCertifyingTests "Plutarch" plutarchCertifyingScript
+          , Certifying.mkCertifyingTests "Plinth (PlutusTx)" plinthCertifyingScript
+          , Certifying.mkCertifyingConformanceTests plutarchCertifyingScript plinthCertifyingScript
+          ]
+      , testGroup
+          "Voting Validator"
+          [ Voting.mkVotingTests "Plutarch" plutarchVotingScript
+          , Voting.mkVotingTests "Plinth (PlutusTx)" plinthVotingScript
+          , Voting.mkVotingConformanceTests plutarchVotingScript plinthVotingScript
           ]
       ]

@@ -51,6 +51,9 @@ module ProgrammableTokens.Test.ScriptContext.Builder (
   balanceWithChangeOutput,
   builderPlaceHolderTxOutRef,
   withProposingScript,
+  withCertifyingScript,
+  withVotingScript,
+  withCert,
 ) where
 
 import Data.Function (on)
@@ -448,6 +451,31 @@ withProposingScript redeemer proposal = ScriptContextBuilder $ \scb ->
         , scbRedeemer = redeemer
         , scbScriptInfo = ProposingScript 0 proposal
         }
+
+withCertifyingScript :: BuiltinData -> TxCert -> ScriptContextBuilder
+withCertifyingScript redeemer cert = ScriptContextBuilder $ \scb ->
+  let idx = length (scbCerts scb)
+      newCerts = scbCerts scb ++ [cert]
+      newRedeemers = Map.insert (Certifying (fromIntegral idx) cert) (Redeemer redeemer) (scbRedeemers scb)
+   in scb
+        { scbCerts = newCerts
+        , scbRedeemers = newRedeemers
+        , scbRedeemer = redeemer
+        , scbScriptInfo = CertifyingScript (fromIntegral idx) cert
+        }
+
+withVotingScript :: BuiltinData -> Voter -> ScriptContextBuilder
+withVotingScript redeemer voter = ScriptContextBuilder $ \scb ->
+  let newRedeemers = Map.insert (Voting voter) (Redeemer redeemer) (scbRedeemers scb)
+   in scb
+        { scbRedeemers = newRedeemers
+        , scbRedeemer = redeemer
+        , scbScriptInfo = VotingScript voter
+        }
+
+withCert :: TxCert -> ScriptContextBuilder
+withCert cert = ScriptContextBuilder $ \scb ->
+  scb{scbCerts = scbCerts scb ++ [cert]}
 
 withRedeemer :: BuiltinData -> ScriptContextBuilder
 withRedeemer redeemer = ScriptContextBuilder $ \scb -> scb{scbRedeemer = redeemer}
