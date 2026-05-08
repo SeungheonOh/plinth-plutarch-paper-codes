@@ -6,33 +6,25 @@
 
 module Sample.SamplePlinth where
 
+import PlutusTx qualified
 import PlutusTx.AsData (asData)
+import PlutusTx.Code (CompiledCode)
 import PlutusTx.Prelude
 
-$( asData
-     [d|
-       data MaybeData a
-         = DNothing
-         | DJust a
-       |]
- )
+asData
+  [d|
+    data Withdraw
+      = Amount Integer
+      | Joint Withdraw Withdraw
+      | Deduct Integer Withdraw
+      deriving newtype (UnsafeFromData, ToData)
+    |]
 
-data List a
-  = Nil
-  | Cons a (List a)
+netWithdraw :: Withdraw -> Integer
+netWithdraw w = case w of
+  Amount n -> n
+  Joint x y -> netWithdraw x + netWithdraw y
+  Deduct n from -> netWithdraw from - n
 
-fromMaybeData :: (ToData a, UnsafeFromData a) => a -> MaybeData a -> a
-fromMaybeData def DNothing = def
-fromMaybeData _ (DJust x) = x
-
-foldList :: (b -> a -> b) -> b -> List a -> b
-foldList _ acc Nil = acc
-foldList f acc (Cons x rest) = foldList f (f acc x) rest
-
-sumMaybeIntegers :: List (MaybeData Integer) -> Integer
-sumMaybeIntegers =
-  foldList
-    ( \acc mx ->
-        matchMaybeData mx acc (\n -> acc + n)
-    )
-    0
+netWithdrawUPLC :: CompiledCode (Withdraw -> Integer)
+netWithdrawUPLC = $$(PlutusTx.compile [||netWithdraw||])

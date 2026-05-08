@@ -1,51 +1,28 @@
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# OPTIONS_GHC -Wno-missing-deriving-strategies -Wno-missing-import-lists -Wno-missing-export-lists #-}
 
 module Sample.Sample where
 
-import Data.Kind (Type)
 import GHC.Generics (Generic)
 import Generics.SOP qualified as SOP
-import Plutarch.Prelude hiding (PCons, PList, PNil)
+import Plutarch.Internal.Term (Config (NoTracing), Script, compile)
+import Plutarch.Prelude
 
-data PMaybeData (a :: S -> Type) (s :: S)
-  = PDNothing
-  | PDJust (Term s (PAsData a))
+data PWithdraw s
+  = PAmount (Term s (PAsData PInteger))
+  | PJoint (Term s (PAsData PWithdraw)) (Term s (PAsData PWithdraw))
+  | PDeduct (Term s (PAsData PInteger)) (Term s (PAsData PWithdraw))
   deriving stock (Generic)
-  deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
-  deriving (PlutusType) via (DeriveAsDataStruct (PMaybeData a))
+  deriving anyclass (SOP.Generic, PIsData)
+  deriving PlutusType via DeriveAsDataStruct PWithdraw
 
-data PList (a :: S -> Type) (s :: S)
-  = PNil
-  | PCons (Term s a) (Term s (PList a))
-  deriving stock (Generic)
-  deriving anyclass (SOP.Generic)
-  deriving (PlutusType) via (DeriveAsSOPStruct (PList a))
+netWithdraw :: Term s (PWithdraw :--> PInteger)
+netWithdraw = pfix #$ plam $ \self wt -> pmatch wt $ \w ->
+  case w of
+    PAmount n -> pfromData n
+    PJoint x y -> (self # pfromData x) + (self # pfromData y)
+    PDeduct n from -> (self # pfromData from) - pfromData n
 
-pfromMaybeData :: (PIsData a) => Term s (a :--> PMaybeData a :--> a)
-pfromMaybeData = phoistAcyclic $ plam $ \def mx ->
-  pmatch mx $ \case
-    PDNothing -> def
-    PDJust x -> pfromData x
-
-pfoldPList :: Term s ((b :--> a :--> b) :--> b :--> PList a :--> b)
-pfoldPList = phoistAcyclic $ pfix #$ plam $ \self f acc xs ->
-  pmatch xs $ \case
-    PNil -> acc
-    PCons x rest -> self # f # (f # acc # x) # rest
-
-psumMaybeIntegers :: Term s (PList (PMaybeData PInteger) :--> PInteger)
-psumMaybeIntegers = phoistAcyclic $
-  plam $ \xs ->
-    pfoldPList
-      # plam
-        ( \acc mx ->
-            pmatch mx $ \case
-              PDNothing -> acc
-              PDJust n -> acc + pfromData n
-        )
-      # 0
-      # xs
+netWithdrawUPLC :: Script
+netWithdrawUPLC = case compile NoTracing netWithdraw of
+  Right s -> s
+  Left err -> error (show err)
