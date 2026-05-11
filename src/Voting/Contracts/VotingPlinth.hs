@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fexpose-all-unfoldings #-}
-{-# OPTIONS_GHC -fno-specialize #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
 
 module Voting.Contracts.VotingPlinth (
   plinthVotingScript,
@@ -15,8 +14,10 @@ import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
 
 import PlutusTx qualified
-import PlutusTx.Data.AssocMap qualified as Map
+import PlutusTx.Builtins qualified as Builtins
+import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
+import PlutusTx.Data.AssocMap qualified as Map
 import PlutusTx.Data.List (List)
 import PlutusTx.Data.List qualified as DList
 import PlutusTx.Prelude
@@ -35,31 +36,63 @@ compiledCodeToScript code =
 -- 2. Utility functions
 -- ============================================================================
 
+{-# INLINEABLE findTNEntry #-}
+findTNEntry
+  :: BuiltinData
+  -> BI.BuiltinList (BI.BuiltinPair BuiltinData BuiltinData)
+  -> Bool
+findTNEntry tnData = go
+ where
+  go tokens =
+    Builtins.matchList'
+      tokens
+      False
+      ( \tk rest ->
+          if Builtins.equalsData (BI.fst tk) tnData
+            then BI.unsafeDataAsI (BI.snd tk) == 1
+            else go rest
+      )
+
+{-# INLINEABLE findCSEntry #-}
+findCSEntry
+  :: BuiltinData
+  -> BuiltinData
+  -> BI.BuiltinList (BI.BuiltinPair BuiltinData BuiltinData)
+  -> Bool
+findCSEntry csData tnData = go
+ where
+  go entries =
+    Builtins.matchList'
+      entries
+      False
+      ( \pair rest ->
+          if Builtins.equalsData (BI.fst pair) csData
+            then findTNEntry tnData (BI.unsafeDataAsMap (BI.snd pair))
+            else go rest
+      )
+
 {-# INLINEABLE valueHasNFT #-}
-valueHasNFT :: CurrencySymbol -> TokenName -> Value -> Bool
-valueHasNFT cs tn (Value m) =
-  case Map.lookup cs m of
-    Just inner -> case Map.lookup tn inner of
-      Just qty -> qty == 1
-      Nothing -> False
-    Nothing -> False
+valueHasNFT :: BuiltinData -> BuiltinData -> Value -> Bool
+valueHasNFT csData tnData (Value m) =
+  findCSEntry csData tnData (Map.toBuiltinList m)
 
 {-# INLINEABLE inputHasNFT #-}
-inputHasNFT :: CurrencySymbol -> TokenName -> TxInInfo -> Bool
-inputHasNFT cs tn (TxInInfo _ (TxOut _ val _ _)) = valueHasNFT cs tn val
+inputHasNFT :: BuiltinData -> BuiltinData -> TxInInfo -> Bool
+inputHasNFT csData tnData (TxInInfo _ (TxOut _ val _ _)) =
+  valueHasNFT csData tnData val
 
 {-# INLINEABLE anyInputHasNFT #-}
-anyInputHasNFT :: CurrencySymbol -> TokenName -> List TxInInfo -> Bool
-anyInputHasNFT cs tn = DList.any (inputHasNFT cs tn)
+anyInputHasNFT :: BuiltinData -> BuiltinData -> List TxInInfo -> Bool
+anyInputHasNFT csData tnData = DList.any (inputHasNFT csData tnData)
 
 -- ============================================================================
 -- 3. Main validator logic
 -- ============================================================================
 
 {-# INLINEABLE votingValidator #-}
-votingValidator :: CurrencySymbol -> TokenName -> TxInfo -> ()
-votingValidator cs tn txInfo =
-  if anyInputHasNFT cs tn (txInfoInputs txInfo)
+votingValidator :: BuiltinData -> BuiltinData -> TxInfo -> ()
+votingValidator csData tnData txInfo =
+  if anyInputHasNFT csData tnData (txInfoInputs txInfo)
     then ()
     else error ()
 
@@ -70,12 +103,10 @@ votingValidator cs tn txInfo =
 {-# INLINEABLE mkVotingValidator #-}
 mkVotingValidator :: BuiltinData -> BuiltinData -> BuiltinData -> ()
 mkVotingValidator csData tnData ctxData =
-  let cs = unsafeFromBuiltinData @CurrencySymbol csData
-      tn = unsafeFromBuiltinData @TokenName tnData
-      ctx = unsafeFromBuiltinData @ScriptContext ctxData
+  let ctx = unsafeFromBuiltinData @ScriptContext ctxData
       ScriptContext{scriptContextTxInfo = txInfo, scriptContextScriptInfo = scriptInfo} = ctx
    in case scriptInfo of
-        VotingScript _ -> votingValidator cs tn txInfo
+        VotingScript _ -> votingValidator csData tnData txInfo
         _ -> error ()
 
 plinthVotingScript :: Script
