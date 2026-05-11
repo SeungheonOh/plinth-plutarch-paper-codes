@@ -1,19 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fno-specialize #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:inline-constants #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-cse-iterations=8 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-simplifier-iterations-pir=24 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:max-simplifier-iterations-uplc=24 #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:optimize #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:remove-trace #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
 
 module Settings.Contracts.SettingsPlinth (
   plinthSettingsScript,
@@ -56,6 +50,7 @@ import Settings.Types.SettingsState (
   pattern BeforeD,
   pattern ScriptWitD,
   pattern SettingsAdminUpdateD,
+  pattern SettingsDatumD,
   pattern SignatureD,
   pattern TreasuryAdminUpdateD,
  )
@@ -161,13 +156,30 @@ listAnyInput = DList.any
 -- ============================================================================
 
 {-# INLINEABLE checkSettingsAdminUpdate #-}
-checkSettingsAdminUpdate :: SettingsDatumD -> SettingsDatumD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
+checkSettingsAdminUpdate
+  :: SettingsDatumD
+  -> SettingsDatumD
+  -> DList.List PubKeyHash
+  -> POSIXTimeRange
+  -> DMap.Map Credential Lovelace
+  -> Bool
 checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl =
-  let admin = unsafeFromBuiltinData @MultisigScriptD (sdSettingsAdminD inputDatum)
+  let SettingsDatumD
+        { sdSettingsAdminD = inSettingsAdmin
+        , sdTreasuryAddressD = inTreasuryAddress
+        , sdTreasuryAllowanceD = inTreasuryAllowance
+        , sdAuthorizedStakingKeysD = inAuthorizedStakingKeys
+        } = inputDatum
+      SettingsDatumD
+        { sdTreasuryAddressD = outTreasuryAddress
+        , sdTreasuryAllowanceD = outTreasuryAllowance
+        , sdAuthorizedStakingKeysD = outAuthorizedStakingKeys
+        } = outputDatum
+      admin = unsafeFromBuiltinData @MultisigScriptD inSettingsAdmin
       signedByAdmin = multisigSatisfied admin sigs validRange wdrl
-      stakingKeysUnchanged = sdAuthorizedStakingKeysD inputDatum == sdAuthorizedStakingKeysD outputDatum
-      treasuryAddrUnchanged = sdTreasuryAddressD inputDatum == sdTreasuryAddressD outputDatum
-      treasuryAllowUnchanged = sdTreasuryAllowanceD inputDatum == sdTreasuryAllowanceD outputDatum
+      stakingKeysUnchanged = inAuthorizedStakingKeys == outAuthorizedStakingKeys
+      treasuryAddrUnchanged = inTreasuryAddress == outTreasuryAddress
+      treasuryAllowUnchanged = inTreasuryAllowance == outTreasuryAllowance
    in signedByAdmin
         && stakingKeysUnchanged
         && treasuryAddrUnchanged
@@ -178,19 +190,47 @@ checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl =
 -- ============================================================================
 
 {-# INLINEABLE checkTreasuryAdminUpdate #-}
-checkTreasuryAdminUpdate :: SettingsDatumD -> SettingsDatumD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
+checkTreasuryAdminUpdate
+  :: SettingsDatumD
+  -> SettingsDatumD
+  -> DList.List PubKeyHash
+  -> POSIXTimeRange
+  -> DMap.Map Credential Lovelace
+  -> Bool
 checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl =
-  let admin = unsafeFromBuiltinData @MultisigScriptD (sdTreasuryAdminD inputDatum)
+  let SettingsDatumD
+        { sdSettingsAdminD = inSettingsAdmin
+        , sdMetadataAdminD = inMetadataAdmin
+        , sdTreasuryAdminD = inTreasuryAdmin
+        , sdAuthorizedScoopersD = inAuthorizedScoopers
+        , sdBaseFeeD = inBaseFee
+        , sdSimpleFeeD = inSimpleFee
+        , sdStrategyFeeD = inStrategyFee
+        , sdPoolCreationFeeD = inPoolCreationFee
+        , sdExtensionsD = inExtensions
+        } = inputDatum
+      SettingsDatumD
+        { sdSettingsAdminD = outSettingsAdmin
+        , sdMetadataAdminD = outMetadataAdmin
+        , sdTreasuryAdminD = outTreasuryAdmin
+        , sdAuthorizedScoopersD = outAuthorizedScoopers
+        , sdBaseFeeD = outBaseFee
+        , sdSimpleFeeD = outSimpleFee
+        , sdStrategyFeeD = outStrategyFee
+        , sdPoolCreationFeeD = outPoolCreationFee
+        , sdExtensionsD = outExtensions
+        } = outputDatum
+      admin = unsafeFromBuiltinData @MultisigScriptD inTreasuryAdmin
       signedByAdmin = multisigSatisfied admin sigs validRange wdrl
-      settingsAdminUnchanged = sdSettingsAdminD inputDatum == sdSettingsAdminD outputDatum
-      metadataAdminUnchanged = sdMetadataAdminD inputDatum == sdMetadataAdminD outputDatum
-      treasuryAdminUnchanged = sdTreasuryAdminD inputDatum == sdTreasuryAdminD outputDatum
-      scoopersUnchanged = sdAuthorizedScoopersD inputDatum == sdAuthorizedScoopersD outputDatum
-      baseFeeUnchanged = sdBaseFeeD inputDatum == sdBaseFeeD outputDatum
-      simpleFeeUnchanged = sdSimpleFeeD inputDatum == sdSimpleFeeD outputDatum
-      strategyFeeUnchanged = sdStrategyFeeD inputDatum == sdStrategyFeeD outputDatum
-      poolCreationFeeUnchanged = sdPoolCreationFeeD inputDatum == sdPoolCreationFeeD outputDatum
-      extensionsUnchanged = sdExtensionsD inputDatum == sdExtensionsD outputDatum
+      settingsAdminUnchanged = inSettingsAdmin == outSettingsAdmin
+      metadataAdminUnchanged = inMetadataAdmin == outMetadataAdmin
+      treasuryAdminUnchanged = inTreasuryAdmin == outTreasuryAdmin
+      scoopersUnchanged = inAuthorizedScoopers == outAuthorizedScoopers
+      baseFeeUnchanged = inBaseFee == outBaseFee
+      simpleFeeUnchanged = inSimpleFee == outSimpleFee
+      strategyFeeUnchanged = inStrategyFee == outStrategyFee
+      poolCreationFeeUnchanged = inPoolCreationFee == outPoolCreationFee
+      extensionsUnchanged = inExtensions == outExtensions
    in signedByAdmin
         && settingsAdminUnchanged
         && metadataAdminUnchanged
@@ -210,11 +250,10 @@ checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl =
 settingsValidator :: SettingsDatumD -> SettingsRedeemerD -> TxOutRef -> TxInfo -> Bool
 settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoMint = mint, txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoWdrl = wdrl} =
   let ownInput = findOwnInput ownRef inputs
-      ownAddress = txOutAddress (txInInfoResolved ownInput)
-      ownInputValue = txOutValue (txInInfoResolved ownInput)
+      TxInInfo _ ownResolved = ownInput
+      TxOut ownAddress ownInputValue _ _ = ownResolved
       ownOutput = listHeadOutput outputs
-      ownOutputAddress = txOutAddress ownOutput
-      ownOutputValue = txOutValue ownOutput
+      TxOut ownOutputAddress ownOutputValue _ _ = ownOutput
       outputDatum = getOutputDatum ownOutput
       valueNotChanged = valueWithoutLovelace ownOutputValue == valueWithoutLovelace ownInputValue
       noMint = valueIsZero mint
@@ -223,8 +262,10 @@ settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInf
         && valueNotChanged
         && noMint
         && case redeemer of
-          SettingsAdminUpdateD -> checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
-          TreasuryAdminUpdateD -> checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
+          SettingsAdminUpdateD ->
+            checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
+          TreasuryAdminUpdateD ->
+            checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
 
 -- ============================================================================
 -- 7. Mint validator
@@ -266,15 +307,15 @@ mintsExactlyOneToken expectedCs expectedTn mv =
 findSettingsOutput :: CurrencySymbol -> DList.List TxOut -> Bool
 findSettingsOutput ownPolicyId =
   DList.any
-    ( \o ->
+    ( \(TxOut addr _ d _) ->
         matchCredential
-          (addressCredential (txOutAddress o))
+          (addressCredential addr)
           (\_ -> False)
           ( \sh ->
               sh
                 == ScriptHash (unCurrencySymbol ownPolicyId)
                 && matchOutputDatum
-                  (txOutDatum o)
+                  d
                   False
                   (\_ -> False)
                   (\_ -> True)

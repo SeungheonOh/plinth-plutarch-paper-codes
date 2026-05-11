@@ -13,7 +13,6 @@ module Certifying.Contracts.CertifyingPlinth (
 
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
-import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound)
 
 import PlutusTx qualified
 import PlutusTx.Code (getPlcNoAnn)
@@ -35,14 +34,12 @@ compiledCodeToScript code =
 
 {-# INLINEABLE isEntirelyAfter #-}
 isEntirelyAfter :: POSIXTimeRange -> Integer -> Bool
-isEntirelyAfter validRange threshold =
-  matchInterval validRange $ \lb _ub ->
-    matchLowerBound lb $ \ext inclusive ->
-      matchExtended
-        ext
-        False
-        (\(POSIXTime t) -> if inclusive then t > threshold else t >= threshold)
-        True
+isEntirelyAfter (Interval (LowerBound ext inclusive) _ub) threshold =
+  case ext of
+    NegInf -> False
+    Finite (POSIXTime t) ->
+      if inclusive then threshold < t else threshold <= t
+    PosInf -> True
 
 {-# INLINEABLE isDelegateToAbstain #-}
 isDelegateToAbstain :: Delegatee -> Bool
