@@ -12,7 +12,7 @@ module Crowdfund.Contracts.Crowdfund (
   mkCrowdfundValidator,
 ) where
 
-import Plutarch.LedgerApi.AssocMap (PMap, plookup)
+import Plutarch.LedgerApi.AssocMap (plookup)
 import Plutarch.LedgerApi.V3
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
@@ -144,41 +144,26 @@ psumWallets = phoistAcyclic $ plam $ \m ->
 pmapSize :: Term s (PMap any PPubKeyHash PInteger :--> PInteger)
 pmapSize = phoistAcyclic $ plam $ \m -> plistLength # pto m
 
-pfilterOutKey :: Term s (PPubKeyHash :--> PBuiltinList (PBuiltinPair (PAsData PPubKeyHash) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PPubKeyHash) (PAsData PInteger)))
-pfilterOutKey = phoistAcyclic $ pfix #$ plam $ \self key pairs ->
-  pelimList
-    ( \pair rest ->
-        pif
-          (pfromData (pfstBuiltin # pair) #== key)
-          (self # key # rest)
-          (pcons # pair # (self # key # rest))
-    )
-    pnil
-    pairs
-
-ppairsEqual :: Term s (PBuiltinList (PBuiltinPair (PAsData PPubKeyHash) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PPubKeyHash) (PAsData PInteger)) :--> PBool)
-ppairsEqual = phoistAcyclic $ pfix #$ plam $ \self xs ys ->
-  pelimList
-    ( \x xrest ->
+pfilterOutKey
+  :: forall (any :: KeyGuarantees) s.
+     Term
+       s
+       ( PPubKeyHash
+           :--> PMap any PPubKeyHash PInteger
+           :--> PMap any PPubKeyHash PInteger
+       )
+pfilterOutKey = phoistAcyclic $ plam $ \key m ->
+  let goPairs = pfix #$ plam $ \self pairs ->
         pelimList
-          ( \y yrest ->
-              pfstBuiltin
-                # x
-                #== pfstBuiltin
-                # y
-                #&& psndBuiltin
-                # x
-                #== psndBuiltin
-                # y
-                #&& self
-                # xrest
-                # yrest
+          ( \pair rest ->
+              pif
+                (pfromData (pfstBuiltin # pair) #== key)
+                (self # rest)
+                (pcons # pair # (self # rest))
           )
-          (pconstant False)
-          ys
-    )
-    (pelimList (\_ _ -> pconstant False) (pconstant True) ys)
-    xs
+          pnil
+          pairs
+   in pcon $ PMap (goPairs # pto m)
 
 pgetOutputDatum :: Term s (PTxOut :--> PCrowdfundDatum)
 pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
@@ -218,7 +203,8 @@ pcheckDonate = phoistAcyclic $ plam $ \datum txInfo contractOutputs contractAmou
                     validRange = pmatch txInfo $ \txI -> ptxInfo'validRange txI
                     deadline = pfromData pcfDeadline
                     walletsUnchanged =
-                      ppairsEqual # (pfilterOutKey # donor # pto inputWallets) # (pfilterOutKey # donor # pto outputWallets)
+                      pdata (pfilterOutKey # donor # inputWallets)
+                        #== pdata (pfilterOutKey # donor # outputWallets)
                     donorAmountCorrect =
                       pmatch (plookup # donor # outputWallets) $ \case
                         PJust outputWalletAmount ->
@@ -307,9 +293,8 @@ pcheckReclaim = phoistAcyclic $ plam $ \datum txInfo contractInputs contractOutp
                                   #== pcfGoal
                                   #&& outDeadline
                                   #== pcfDeadline
-                                  #&& ppairsEqual
-                                  # pto (pfromData outWallets)
-                                  # (pfilterOutKey # currentSigner # pto wallets)
+                                  #&& outWallets
+                                  #== pdata (pfilterOutKey # currentSigner # wallets)
                       )
                 )
                 (plistLength # contractOutputs #== 0)

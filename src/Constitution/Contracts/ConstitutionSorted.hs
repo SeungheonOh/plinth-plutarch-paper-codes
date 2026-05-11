@@ -14,6 +14,16 @@ module Constitution.Contracts.ConstitutionSorted (
 
 import Plutarch.LedgerApi.V3
 import Plutarch.Prelude
+import Plutarch.Unsafe (punsafeCoerce)
+
+import Constitution.Types.ConstitutionConfig (
+  PConfigEntry (..),
+  PIntPredEntry (..),
+  PParamValue (..),
+  PPredKey (..),
+  PRatPair (..),
+  PRatPredEntry (..),
+ )
 
 -- ============================================================================
 -- 1. Infrastructure
@@ -24,40 +34,59 @@ pcheck b = pif b (pconstant ()) perror
 
 -- ============================================================================
 -- 2. Predicate validation (integers)
+--
+-- `papplyIntPred` operates on a typed `PPredKey`; nothing is decoded from raw
+-- `PData` by hand.
 -- ============================================================================
 
-pintPredAllExpected :: Term s (PInteger :--> PInteger :--> PBuiltinList PData :--> PBool)
-pintPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self predKeyIdx actualInt expectedValues ->
+papplyIntPred :: Term s (PPredKey :--> PInteger :--> PInteger :--> PBool)
+papplyIntPred = phoistAcyclic $ plam $ \pk expected actual ->
+  pmatch pk $ \case
+    PMinValue -> expected #<= actual
+    PMaxValue -> expected #>= actual
+    PNotEqual -> pnot # (expected #== actual)
+
+pintPredAllExpected
+  :: Term
+      s
+      ( PPredKey
+          :--> PInteger
+          :--> PBuiltinList (PAsData PInteger)
+          :--> PBool
+      )
+pintPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actual expecteds ->
   pelimList
-    ( \expectedData expectedRest ->
-        let expectedInt = pasInt # expectedData
-            predResult =
-              pcond
-                [ (predKeyIdx #== 0, expectedInt #<= actualInt)
-                , (predKeyIdx #== 1, expectedInt #>= actualInt)
-                , (predKeyIdx #== 2, pnot # (expectedInt #== actualInt))
-                ]
-                (pconstant False)
-         in predResult #&& self # predKeyIdx # actualInt # expectedRest
+    ( \expected rest ->
+        papplyIntPred
+          # pk
+          # pfromData expected
+          # actual
+          #&& self
+          # pk
+          # actual
+          # rest
     )
     (pconstant True)
-    expectedValues
+    expecteds
 
-pvalidateIntPreds :: Term s (PBuiltinList PData :--> PInteger :--> PBool)
-pvalidateIntPreds = phoistAcyclic $ pfix #$ plam $ \self preds actualInt ->
+pvalidateIntPreds
+  :: Term
+      s
+      ( PBuiltinList (PAsData PIntPredEntry)
+          :--> PInteger
+          :--> PBool
+      )
+pvalidateIntPreds = phoistAcyclic $ pfix #$ plam $ \self preds actual ->
   pelimList
-    ( \predData predsRest ->
-        let predConstrFields = psndBuiltin # (pasConstr # predData)
-            predKeyIdx = pfstBuiltin # (pasConstr # (phead # predConstrFields))
-            expectedValuesData = phead # (ptail # predConstrFields)
-            expectedValues = pasList # expectedValuesData
-         in pintPredAllExpected
-              # predKeyIdx
-              # actualInt
-              # expectedValues
-              #&& self
-              # predsRest
-              # actualInt
+    ( \entry rest ->
+        pmatch (pfromData entry) $ \(PIntPredEntry pk exps) ->
+          pintPredAllExpected
+            # pfromData pk
+            # actual
+            # pfromData exps
+            #&& self
+            # rest
+            # actual
     )
     (pconstant True)
     preds
@@ -66,118 +95,143 @@ pvalidateIntPreds = phoistAcyclic $ pfix #$ plam $ \self preds actualInt ->
 -- 3. Predicate validation (rationals)
 -- ============================================================================
 
-pratPredAllExpected :: Term s (PInteger :--> PInteger :--> PInteger :--> PBuiltinList PData :--> PBool)
-pratPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self predKeyIdx actualNum actualDen expectedValues ->
+papplyRatPred :: Term s (PPredKey :--> PInteger :--> PInteger :--> PBool)
+papplyRatPred = phoistAcyclic $ plam $ \pk lhs rhs ->
+  pmatch pk $ \case
+    PMinValue -> lhs #<= rhs
+    PMaxValue -> lhs #>= rhs
+    PNotEqual -> pnot # (lhs #== rhs)
+
+pratPredAllExpected
+  :: Term
+      s
+      ( PPredKey
+          :--> PInteger
+          :--> PInteger
+          :--> PBuiltinList (PAsData PRatPair)
+          :--> PBool
+      )
+pratPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actualNum actualDen expecteds ->
   pelimList
-    ( \expectedData expectedRest ->
-        let expectedFields = psndBuiltin # (pasConstr # expectedData)
-            expectedNum = pasInt # (phead # expectedFields)
-            expectedDen = pasInt # (phead # (ptail # expectedFields))
-            lhs = expectedNum * actualDen
-            rhs = actualNum * expectedDen
-            predResult =
-              pcond
-                [ (predKeyIdx #== 0, lhs #<= rhs)
-                , (predKeyIdx #== 1, lhs #>= rhs)
-                , (predKeyIdx #== 2, pnot # (lhs #== rhs))
-                ]
-                (pconstant False)
-         in predResult #&& self # predKeyIdx # actualNum # actualDen # expectedRest
+    ( \pairD rest ->
+        pmatch (pfromData pairD) $ \(PRatPair{prpNum, prpDen}) ->
+          papplyRatPred
+            # pk
+            # (pfromData prpNum * actualDen)
+            # (actualNum * pfromData prpDen)
+            #&& self
+            # pk
+            # actualNum
+            # actualDen
+            # rest
     )
     (pconstant True)
-    expectedValues
+    expecteds
 
-pvalidateRatPreds :: Term s (PBuiltinList PData :--> PInteger :--> PInteger :--> PBool)
+pvalidateRatPreds
+  :: Term
+      s
+      ( PBuiltinList (PAsData PRatPredEntry)
+          :--> PInteger
+          :--> PInteger
+          :--> PBool
+      )
 pvalidateRatPreds = phoistAcyclic $ pfix #$ plam $ \self preds actualNum actualDen ->
   pelimList
-    ( \predData predsRest ->
-        let predConstrFields = psndBuiltin # (pasConstr # predData)
-            predKeyIdx = pfstBuiltin # (pasConstr # (phead # predConstrFields))
-            expectedValuesData = phead # (ptail # predConstrFields)
-            expectedValues = pasList # expectedValuesData
-         in pratPredAllExpected
-              # predKeyIdx
-              # actualNum
-              # actualDen
-              # expectedValues
-              #&& self
-              # predsRest
-              # actualNum
-              # actualDen
+    ( \entry rest ->
+        pmatch (pfromData entry) $ \(PRatPredEntry pk exps) ->
+          pratPredAllExpected
+            # pfromData pk
+            # actualNum
+            # actualDen
+            # pfromData exps
+            #&& self
+            # rest
+            # actualNum
+            # actualDen
     )
     (pconstant True)
     preds
 
 -- ============================================================================
 -- 4. ParamValue validation
+--
+-- `pvalidateParamValue` takes a typed `PParamValue`. The actual changed-value
+-- is still passed as `PData` because its shape depends on which constructor
+-- of `PParamValue` we are looking at.
 -- ============================================================================
 
-pvalidateParamValue :: Term s (PData :--> PData :--> PBool)
+pvalidateParamValue :: Term s (PParamValue :--> PData :--> PBool)
 pvalidateParamValue =
   pfix #$ plam $ \self paramValue actualValue ->
-    plet (pasConstr # paramValue) $ \constrPair ->
-      let constrIdx = pfstBuiltin # constrPair
-          fields = psndBuiltin # constrPair
-          validateList = pfix #$ plam $ \selfList pvs actuals ->
-            pelimList
-              ( \pv pvRest ->
-                  pelimList
-                    ( \actual actualRest ->
-                        self # pv # actual #&& selfList # pvRest # actualRest
-                    )
-                    (pconstant False)
-                    actuals
-              )
-              (pnull # actuals)
-              pvs
-       in pcond
-            [
-              ( constrIdx #== 0
-              , pvalidateIntPreds # (pasList # (phead # fields)) # (pasInt # actualValue)
-              )
-            ,
-              ( constrIdx #== 1
-              , let ratList = pasList # actualValue
-                    actualNum = pasInt # (phead # ratList)
-                    actualDen = pasInt # (phead # (ptail # ratList))
-                 in pvalidateRatPreds # (pasList # (phead # fields)) # actualNum # actualDen
-              )
-            ,
-              ( constrIdx #== 2
-              , validateList # (pasList # (phead # fields)) # (pasList # actualValue)
-              )
-            , (constrIdx #== 3, pconstant True)
-            ]
-            (pconstant False)
+    pmatch paramValue $ \case
+      PParamInteger preds ->
+        pvalidateIntPreds # pfromData preds # (pasInt # actualValue)
+      PParamRational preds ->
+        let ratList = pasList # actualValue
+            actualNum = pasInt # (phead # ratList)
+            actualDen = pasInt # (phead # (ptail # ratList))
+         in pvalidateRatPreds # pfromData preds # actualNum # actualDen
+      PParamList pvList ->
+        let actualList = pasList # actualValue
+            validateList = pfix #$ plam $ \selfList pvs actuals ->
+              pelimList
+                ( \pvD pvRest ->
+                    pelimList
+                      ( \actual actualRest ->
+                          self
+                            # pfromData pvD
+                            # actual
+                            #&& selfList
+                            # pvRest
+                            # actualRest
+                      )
+                      (pconstant False)
+                      actuals
+                )
+                (pnull # actuals)
+                pvs
+         in validateList # pfromData pvList # actualList
+      PParamAny -> pconstant True
 
 -- ============================================================================
 -- 5. Sorted merge-join: runRules
+--
+-- The configuration is a typed list of `PConfigEntry` (the wire-level pair
+-- `(Integer, ParamValue)`), and the changed-params side is a list of typed
+-- builtin pairs.
 -- ============================================================================
 
-prunRules :: Term s (PBuiltinList PData :--> PBuiltinList (PBuiltinPair PData PData) :--> PBool)
+prunRules
+  :: Term
+      s
+      ( PBuiltinList (PAsData PConfigEntry)
+          :--> PBuiltinList (PBuiltinPair (PAsData PInteger) PData)
+          :--> PBool
+      )
 prunRules = phoistAcyclic $ pfix #$ plam $ \self cfg cparams ->
   pelimList
     ( \cfgEntry cfgRest ->
         pelimList
           ( \cpEntry cpRest ->
-              let cfgFields = psndBuiltin # (pasConstr # cfgEntry)
-                  expectedPid = pasInt # (phead # cfgFields)
-                  cfgParamValue = phead # (ptail # cfgFields)
-                  actualPid = pasInt # (pfstBuiltin # cpEntry)
-               in pif
-                    (actualPid #== expectedPid)
-                    ( pvalidateParamValue
-                        # cfgParamValue
-                        # (psndBuiltin # cpEntry)
-                        #&& self
-                        # cfgRest
-                        # cpRest
-                    )
-                    ( pif
-                        (actualPid #> expectedPid)
-                        (self # cfgRest # cparams)
-                        (pconstant False)
-                    )
+              pmatch (pfromData cfgEntry) $ \(PConfigEntry{pceParamId, pceParamValue}) ->
+                let expectedPid = pfromData pceParamId
+                    actualPid = pfromData (pfstBuiltin # cpEntry)
+                    actualValue = psndBuiltin # cpEntry
+                 in pif
+                      (actualPid #== expectedPid)
+                      ( pvalidateParamValue
+                          # pfromData pceParamValue
+                          # actualValue
+                          #&& self
+                          # cfgRest
+                          # cpRest
+                      )
+                      ( pif
+                          (actualPid #> expectedPid)
+                          (self # cfgRest # cparams)
+                          (pconstant False)
+                      )
           )
           (pconstant True)
           cparams
@@ -189,7 +243,13 @@ prunRules = phoistAcyclic $ pfix #$ plam $ \self cfg cparams ->
 -- 6. Governance action extraction
 -- ============================================================================
 
-pwithChangedParams :: Term s (PBuiltinList PData :--> PScriptContext :--> PBool)
+pwithChangedParams
+  :: Term
+      s
+      ( PBuiltinList (PAsData PConfigEntry)
+          :--> PScriptContext
+          :--> PBool
+      )
 pwithChangedParams = phoistAcyclic $ plam $ \config ctx ->
   pmatch ctx $ \(PScriptContext{pscriptContext'scriptInfo}) ->
     pmatch pscriptContext'scriptInfo $ \case
@@ -202,7 +262,11 @@ pwithChangedParams = phoistAcyclic $ plam $ \config ctx ->
                   [
                     ( govIdx #== 0
                     , let changedParamsData = phead # (ptail # govFields)
-                       in prunRules # config # (pasMap # changedParamsData)
+                          changedParams =
+                            punsafeCoerce
+                              @(PBuiltinList (PBuiltinPair (PAsData PInteger) PData))
+                              (pasMap # changedParamsData)
+                       in prunRules # config # changedParams
                     )
                   , (govIdx #== 2, pconstant True)
                   ]
@@ -215,5 +279,6 @@ pwithChangedParams = phoistAcyclic $ plam $ \config ctx ->
 
 mkConstitutionValidator :: Term s (PData :--> PScriptContext :--> PUnit)
 mkConstitutionValidator = plam $ \configData ctx ->
-  let config = pasList # configData
+  let config =
+        punsafeCoerce @(PBuiltinList (PAsData PConfigEntry)) (pasList # configData)
    in pcheck $ pwithChangedParams # config # ctx
