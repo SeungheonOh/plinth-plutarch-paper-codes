@@ -17,6 +17,7 @@
 module SmartTokens.Types.PTokenDirectory (
   DirectorySetNode (..),
   DirectorySetNodeD,
+  pattern DirectorySetNodeD,
   keyD,
   nextD,
   transferLogicScriptD,

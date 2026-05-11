@@ -1,13 +1,26 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module SmartTokens.Types.ProgrammableLogicGlobal (
   -- * Plinth redeemer type
-  ProgrammableLogicGlobalRedeemer (..),
+  ProgrammableLogicGlobalRedeemer,
+  pattern TransferAct,
+  pattern SeizeAct,
+  plgrTransferProofs,
+  plgrMintProofs,
+  plgrDirectoryNodeIdx,
+  plgrInputIdxs,
+  plgrOutputsStartIdx,
+  plgrLengthInputIdxs,
 
   -- * Offchain helpers
+  dlistFromList,
+  mkTransferAct,
   absoluteToRelativeInputIdxs,
   mkSeizeActRedeemerFromRelativeInputIdxs,
   mkSeizeActRedeemerFromAbsoluteInputIdxs,
@@ -21,27 +34,32 @@ import Generics.SOP qualified as SOP
 import Plutarch.Internal.Lift ()
 import Plutarch.Prelude
 import PlutusTx qualified
+import PlutusTx.AsData (asData)
+import PlutusTx.Data.List qualified as DList
 
 -- ============================================================================
--- Plinth redeemer type
+-- Plinth redeemer type (data-backed via asData)
+--
+-- The proof / index lists are kept as data-encoded `DList.List Integer` so that
+-- the on-chain validator never has to materialize a regular Haskell `[Integer]`.
 -- ============================================================================
 
-data ProgrammableLogicGlobalRedeemer
-  = TransferAct
-      { plgrTransferProofs :: [Integer]
-      , plgrMintProofs :: [Integer]
-      }
-  | SeizeAct
-      { plgrDirectoryNodeIdx :: Integer
-      , plgrInputIdxs :: [Integer]
-      , plgrOutputsStartIdx :: Integer
-      , plgrLengthInputIdxs :: Integer
-      }
-  deriving (Show, Eq, Generic)
-
-PlutusTx.makeIsDataIndexed
-  ''ProgrammableLogicGlobalRedeemer
-  [('TransferAct, 0), ('SeizeAct, 1)]
+$( asData
+     [d|
+       data ProgrammableLogicGlobalRedeemer
+         = TransferAct
+             { plgrTransferProofs :: DList.List Integer
+             , plgrMintProofs :: DList.List Integer
+             }
+         | SeizeAct
+             { plgrDirectoryNodeIdx :: Integer
+             , plgrInputIdxs :: DList.List Integer
+             , plgrOutputsStartIdx :: Integer
+             , plgrLengthInputIdxs :: Integer
+             }
+         deriving newtype (PlutusTx.UnsafeFromData, PlutusTx.ToData)
+       |]
+ )
 
 -- ============================================================================
 -- Plutarch redeemer type
@@ -62,14 +80,18 @@ data PProgrammableLogicGlobalRedeemer (s :: S)
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
   deriving (PlutusType) via (DeriveAsDataStruct PProgrammableLogicGlobalRedeemer)
 
-deriving via
-  DeriveDataPLiftable PProgrammableLogicGlobalRedeemer ProgrammableLogicGlobalRedeemer
-  instance
-    PLiftable PProgrammableLogicGlobalRedeemer
-
 -- ============================================================================
 -- Offchain helpers
 -- ============================================================================
+
+-- | Convert a regular Haskell list to a data-encoded `DList.List`.
+dlistFromList :: (PlutusTx.ToData a) => [a] -> DList.List a
+dlistFromList = foldr DList.cons DList.nil
+
+-- | Build a `TransferAct` redeemer from regular Haskell lists.
+mkTransferAct :: [Integer] -> [Integer] -> ProgrammableLogicGlobalRedeemer
+mkTransferAct transferProofs mintProofs =
+  TransferAct (dlistFromList transferProofs) (dlistFromList mintProofs)
 
 absoluteToRelativeInputIdxs :: [Integer] -> [Integer]
 absoluteToRelativeInputIdxs [] = []
@@ -88,11 +110,10 @@ mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outpu
   | any (< 0) relativeInputIdxs = error "mkSeizeActRedeemerFromRelativeInputIdxs: negative relative index"
   | otherwise =
       SeizeAct
-        { plgrDirectoryNodeIdx = directoryNodeIdx
-        , plgrInputIdxs = relativeInputIdxs
-        , plgrOutputsStartIdx = outputsStartIdx
-        , plgrLengthInputIdxs = fromIntegral (length relativeInputIdxs)
-        }
+        directoryNodeIdx
+        (dlistFromList relativeInputIdxs)
+        outputsStartIdx
+        (fromIntegral (length relativeInputIdxs))
 
 mkSeizeActRedeemerFromAbsoluteInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
 mkSeizeActRedeemerFromAbsoluteInputIdxs directoryNodeIdx absoluteInputIdxs =

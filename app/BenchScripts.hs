@@ -350,12 +350,12 @@ scenarios =
   , ("seize: mint contained", mkGlobalSeizeMintContainedCtx)
   , ("seize: mint smuggle (reject)", mkGlobalSeizeMintEscapeCtx)
   , ("seize: escape to pubkey (reject)", mkGlobalSeizeDirectEscapeCtx)
-  , ("transfer: burn with mint proof", mkGlobalTransferMintCtx (TransferAct [1] [1]) (-1) 0)
-  , ("transfer: burn no mint proof (reject)", mkGlobalTransferMintCtx (TransferAct [1] []) (-1) 0)
+  , ("transfer: burn with mint proof", mkGlobalTransferMintCtx (mkTransferAct [1] [1]) (-1) 0)
+  , ("transfer: burn no mint proof (reject)", mkGlobalTransferMintCtx (mkTransferAct [1] []) (-1) 0)
   , ("transfer: escape to pubkey (reject)", mkGlobalTransferEscapeCtx)
-  , ("transfer: mint smuggle (reject)", mkGlobalTransferMintCtx (TransferAct [1] [1]) 1 1)
-  , ("transfer: mint with proof+containment", mkGlobalTransferMintCtx (TransferAct [1] [1]) 1 2)
-  , ("transfer: mint no proof (reject)", mkGlobalTransferMintCtx (TransferAct [1] []) 1 2)
+  , ("transfer: mint smuggle (reject)", mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 1)
+  , ("transfer: mint with proof+containment", mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 2)
+  , ("transfer: mint no proof (reject)", mkGlobalTransferMintCtx (mkTransferAct [1] []) 1 2)
   ]
 
 compileNoTracing :: (forall s. Term s a) -> Script
@@ -534,7 +534,7 @@ mkGlobalTransferEscapeCtx :: ScriptContext
 mkGlobalTransferEscapeCtx =
   buildBalancedScriptContext
     ( withRewardingScript
-        (PlutusTx.toBuiltinData $ TransferAct [1] [])
+        (PlutusTx.toBuiltinData $ mkTransferAct [1] [])
         globalCred
         0
         <> withSigner signerPkh

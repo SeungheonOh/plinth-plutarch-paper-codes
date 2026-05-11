@@ -48,8 +48,9 @@ import SmartTokens.Contracts.ProgrammableLogicBase (
 import SmartTokens.Types.Constants (protocolParamsToken)
 import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
 import SmartTokens.Types.ProgrammableLogicGlobal (
-  ProgrammableLogicGlobalRedeemer (TransferAct),
+  ProgrammableLogicGlobalRedeemer,
   mkSeizeActRedeemerFromRelativeInputIdxs,
+  mkTransferAct,
  )
 import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
 import Test.QuickCheck qualified as QC
@@ -77,12 +78,12 @@ mkGlobalTests name script =
         , testCase "unit_seizeAct_burn_offsets_delta_succeeds" $ assertSucceeds mkGlobalSeizeBurnCtx
         , testCase "unit_seizeAct_mint_with_containment_succeeds" $ assertSucceeds mkGlobalSeizeMintContainedCtx
         , testCase "unit_seizeAct_mint_smuggle_rejected" $ assertFails mkGlobalSeizeMintEscapeCtx
-        , testCase "unit_transferAct_burn_with_mint_proof_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (TransferAct [1] [1]) (-1) 0)
-        , testCase "unit_transferAct_burn_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (TransferAct [1] []) (-1) 0)
+        , testCase "unit_transferAct_burn_with_mint_proof_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) (-1) 0)
+        , testCase "unit_transferAct_burn_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) (-1) 0)
         , testCase "unit_transferAct_escape_to_pubkey_rejected" $ assertFails mkGlobalTransferEscapeCtx
-        , testCase "unit_transferAct_mint_smuggle_rejected" $ assertFails (mkGlobalTransferMintCtx (TransferAct [1] [1]) 1 1)
-        , testCase "unit_transferAct_mint_with_proof_and_containment_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (TransferAct [1] [1]) 1 2)
-        , testCase "unit_transferAct_mint_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (TransferAct [1] []) 1 2)
+        , testCase "unit_transferAct_mint_smuggle_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 1)
+        , testCase "unit_transferAct_mint_with_proof_and_containment_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 2)
+        , testCase "unit_transferAct_mint_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) 1 2)
         , testCase "unit_seizeAct_escape_to_pubkey_rejected" $ assertFails mkGlobalSeizeDirectEscapeCtx
         , testProperty "prop_seizeAct_complete_indices_succeeds" $
             QC.forAll (QC.chooseInt (1, 12)) $ \nInt ->
@@ -371,7 +372,7 @@ mkGlobalTransferEscapeCtx :: ScriptContext
 mkGlobalTransferEscapeCtx =
   buildBalancedScriptContext
     ( withRewardingScript
-        (PlutusTx.toBuiltinData $ TransferAct [1] [])
+        (PlutusTx.toBuiltinData $ mkTransferAct [1] [])
         globalCred
         0
         <> withSigner signerPkh

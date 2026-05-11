@@ -12,6 +12,7 @@ module SmartTokens.Types.ProtocolParams (
 
   -- * Plinth (AsData) type
   ProgrammableLogicGlobalParamsD,
+  pattern ProgrammableLogicGlobalParamsD,
   directoryNodeCSD,
   progLogicCredD,
 
