@@ -157,20 +157,23 @@ listAnyInput = DList.any
 
 {-# INLINEABLE checkSettingsAdminUpdate #-}
 checkSettingsAdminUpdate
-  :: BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
+  :: SettingsDatumD
   -> SettingsDatumD
   -> DList.List PubKeyHash
   -> POSIXTimeRange
   -> DMap.Map Credential Lovelace
   -> Bool
-checkSettingsAdminUpdate inSettingsAdmin inAuthorizedStakingKeys inTreasuryAddress inTreasuryAllowance outputDatum sigs validRange wdrl =
+checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl =
   let SettingsDatumD
-        { sdAuthorizedStakingKeysD = outAuthorizedStakingKeys
-        , sdTreasuryAddressD = outTreasuryAddress
+        { sdSettingsAdminD = inSettingsAdmin
+        , sdTreasuryAddressD = inTreasuryAddress
+        , sdTreasuryAllowanceD = inTreasuryAllowance
+        , sdAuthorizedStakingKeysD = inAuthorizedStakingKeys
+        } = inputDatum
+      SettingsDatumD
+        { sdTreasuryAddressD = outTreasuryAddress
         , sdTreasuryAllowanceD = outTreasuryAllowance
+        , sdAuthorizedStakingKeysD = outAuthorizedStakingKeys
         } = outputDatum
       admin = unsafeFromBuiltinData @MultisigScriptD inSettingsAdmin
       signedByAdmin = multisigSatisfied admin sigs validRange wdrl
@@ -188,22 +191,25 @@ checkSettingsAdminUpdate inSettingsAdmin inAuthorizedStakingKeys inTreasuryAddre
 
 {-# INLINEABLE checkTreasuryAdminUpdate #-}
 checkTreasuryAdminUpdate
-  :: BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
-  -> BuiltinData
+  :: SettingsDatumD
   -> SettingsDatumD
   -> DList.List PubKeyHash
   -> POSIXTimeRange
   -> DMap.Map Credential Lovelace
   -> Bool
-checkTreasuryAdminUpdate inSettingsAdmin inMetadataAdmin inTreasuryAdmin inAuthorizedScoopers inBaseFee inSimpleFee inStrategyFee inPoolCreationFee inExtensions outputDatum sigs validRange wdrl =
+checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl =
   let SettingsDatumD
+        { sdSettingsAdminD = inSettingsAdmin
+        , sdMetadataAdminD = inMetadataAdmin
+        , sdTreasuryAdminD = inTreasuryAdmin
+        , sdAuthorizedScoopersD = inAuthorizedScoopers
+        , sdBaseFeeD = inBaseFee
+        , sdSimpleFeeD = inSimpleFee
+        , sdStrategyFeeD = inStrategyFee
+        , sdPoolCreationFeeD = inPoolCreationFee
+        , sdExtensionsD = inExtensions
+        } = inputDatum
+      SettingsDatumD
         { sdSettingsAdminD = outSettingsAdmin
         , sdMetadataAdminD = outMetadataAdmin
         , sdTreasuryAdminD = outTreasuryAdmin
@@ -257,47 +263,9 @@ settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInf
         && noMint
         && case redeemer of
           SettingsAdminUpdateD ->
-            let SettingsDatumD
-                  { sdSettingsAdminD = inSettingsAdmin
-                  , sdTreasuryAddressD = inTreasuryAddress
-                  , sdTreasuryAllowanceD = inTreasuryAllowance
-                  , sdAuthorizedStakingKeysD = inAuthorizedStakingKeys
-                  } = inputDatum
-             in checkSettingsAdminUpdate
-                  inSettingsAdmin
-                  inAuthorizedStakingKeys
-                  inTreasuryAddress
-                  inTreasuryAllowance
-                  outputDatum
-                  sigs
-                  validRange
-                  wdrl
+            checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
           TreasuryAdminUpdateD ->
-            let SettingsDatumD
-                  { sdSettingsAdminD = inSettingsAdmin
-                  , sdMetadataAdminD = inMetadataAdmin
-                  , sdTreasuryAdminD = inTreasuryAdmin
-                  , sdAuthorizedScoopersD = inAuthorizedScoopers
-                  , sdBaseFeeD = inBaseFee
-                  , sdSimpleFeeD = inSimpleFee
-                  , sdStrategyFeeD = inStrategyFee
-                  , sdPoolCreationFeeD = inPoolCreationFee
-                  , sdExtensionsD = inExtensions
-                  } = inputDatum
-             in checkTreasuryAdminUpdate
-                  inSettingsAdmin
-                  inMetadataAdmin
-                  inTreasuryAdmin
-                  inAuthorizedScoopers
-                  inBaseFee
-                  inSimpleFee
-                  inStrategyFee
-                  inPoolCreationFee
-                  inExtensions
-                  outputDatum
-                  sigs
-                  validRange
-                  wdrl
+            checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
 
 -- ============================================================================
 -- 7. Mint validator
