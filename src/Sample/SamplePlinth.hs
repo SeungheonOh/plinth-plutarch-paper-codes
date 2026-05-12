@@ -2,11 +2,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
 
 module Sample.SamplePlinth where
 
-import PlutusTx qualified
+import Plinth.Plugin
 import PlutusTx.AsData (asData)
 import PlutusTx.Code (CompiledCode)
 import PlutusTx.Prelude
@@ -27,4 +27,4 @@ netWithdraw w = case w of
   Deduct n from -> netWithdraw from - n
 
 netWithdrawUPLC :: CompiledCode (Withdraw -> Integer)
-netWithdrawUPLC = $$(PlutusTx.compile [||netWithdraw||])
+netWithdrawUPLC = plinthc netWithdraw

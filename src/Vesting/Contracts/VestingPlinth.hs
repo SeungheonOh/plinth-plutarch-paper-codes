@@ -1,18 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
 
 module Vesting.Contracts.VestingPlinth (
   plinthVestingScript,
 ) where
 
+import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
 import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound)
 import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
-
 import PlutusTx qualified
 import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
@@ -53,30 +52,12 @@ credentialMatchesVkh :: Address -> PubKeyHash -> Bool
 credentialMatchesVkh (Address (PubKeyCredential pkh) _) vkh = pkh == vkh
 credentialMatchesVkh _ _ = False
 
-{-# INLINEABLE getOutputsByVkh #-}
-getOutputsByVkh :: List TxOut -> PubKeyHash -> List TxOut
-getOutputsByVkh outputs vkh =
-  DList.filter (\o -> credentialMatchesVkh (txOutAddress o) vkh) outputs
-
-{-# INLINEABLE getInputsByVkh #-}
-getInputsByVkh :: List TxInInfo -> PubKeyHash -> List TxInInfo
-getInputsByVkh inputs vkh =
-  DList.filter (\(TxInInfo _ o) -> credentialMatchesVkh (txOutAddress o) vkh) inputs
-
 {-# INLINEABLE getLovelaceAmount #-}
 getLovelaceAmount :: Value -> Integer
 getLovelaceAmount (Value m) =
   let outerPairs = BI.unsafeDataAsMap (toBuiltinData m)
       innerPairs = BI.unsafeDataAsMap (BI.snd (BI.head outerPairs))
    in BI.unsafeDataAsI (BI.snd (BI.head innerPairs))
-
-{-# INLINEABLE getAdaFromInputs #-}
-getAdaFromInputs :: List TxInInfo -> Integer
-getAdaFromInputs = DList.foldl (\acc (TxInInfo _ o) -> acc + getLovelaceAmount (txOutValue o)) 0
-
-{-# INLINEABLE getAdaFromOutputs #-}
-getAdaFromOutputs :: List TxOut -> Integer
-getAdaFromOutputs = DList.foldl (\acc o -> acc + getLovelaceAmount (txOutValue o)) 0
 
 {-# INLINEABLE foldAdaByVkhOutputs #-}
 foldAdaByVkhOutputs :: List TxOut -> PubKeyHash -> Integer
@@ -199,4 +180,4 @@ mkVestingValidator ctxData =
 
 plinthVestingScript :: Script
 plinthVestingScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkVestingValidator||])
+  compiledCodeToScript $ plinthc mkVestingValidator

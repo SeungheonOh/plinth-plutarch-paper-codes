@@ -1,19 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 {-# OPTIONS_GHC -fno-specialize #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:target-version=1.1.0 #-}
 
 module Certifying.Contracts.CertifyingPlinth (
   plinthCertifyingScript,
 ) where
 
+import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
-
 import PlutusTx qualified
 import PlutusTx.Code (getPlcNoAnn)
 import PlutusTx.Prelude
@@ -79,4 +78,4 @@ mkCertifyingValidator expirationData ctxData =
 
 plinthCertifyingScript :: Script
 plinthCertifyingScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkCertifyingValidator||])
+  compiledCodeToScript $ plinthc mkCertifyingValidator

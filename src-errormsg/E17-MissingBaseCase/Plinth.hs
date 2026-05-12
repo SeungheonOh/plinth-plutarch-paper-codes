@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wall -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -Wall -fplugin PlutusTx.Plugin #-}
+{-# OPTIONS_GHC -Wall -fplugin Plinth.Plugin #-}
 
 module E17Plinth where
 
