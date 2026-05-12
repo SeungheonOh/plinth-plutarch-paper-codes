@@ -49,3 +49,15 @@ source-repository-package
       plutarch-ledger-api
       plutarch-orphanage
       plutarch-testlib
+
+source-repository-package
+    type: git
+    location: https://github.com/IntersectMBO/plutus
+    tag: 28395b5e397d5baeed518cde526179faa9751718
+    --sha256: sha256-uCfpr8Uumxv/G/UtqWiL1aBpmwO86wt8We6o3w7c2HI=
+    subdir:
+      plutus-core
+      plutus-ledger-api
+      plutus-metatheory
+      plutus-tx
+      plutus-tx-plugin

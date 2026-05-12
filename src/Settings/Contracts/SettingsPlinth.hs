@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -6,6 +7,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-callsite-growth=20 #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-unconditional-growth=20 #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
 
 module Settings.Contracts.SettingsPlinth (
@@ -15,9 +18,6 @@ module Settings.Contracts.SettingsPlinth (
 import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
-import PlutusLedgerApi.V1.Data.Credential (matchCredential)
-import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound, matchUpperBound)
-import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI
@@ -68,49 +68,31 @@ compiledCodeToScript code =
 -- 2. Multisig
 -- ============================================================================
 
-{-# INLINEABLE listElem #-}
-listElem :: PubKeyHash -> DList.List PubKeyHash -> Bool
-listElem = DList.elem
-
-{-# INLINEABLE listAll #-}
-listAll :: (a -> Bool) -> [a] -> Bool
-listAll _ [] = True
-listAll f (x : xs) = f x && listAll f xs
-
-{-# INLINEABLE listAny #-}
-listAny :: (a -> Bool) -> [a] -> Bool
-listAny _ [] = False
-listAny f (x : xs) = f x || listAny f xs
-
-{-# INLINEABLE listCount #-}
-listCount :: (a -> Bool) -> [a] -> Integer
-listCount _ [] = 0
-listCount f (x : xs) = if f x then 1 + listCount f xs else listCount f xs
-
 {-# INLINEABLE pairsHasKey #-}
 pairsHasKey :: Credential -> DMap.Map Credential Lovelace -> Bool
 pairsHasKey = DMap.member
 
 {-# INLINEABLE multisigSatisfied #-}
 multisigSatisfied :: MultisigScriptD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
-multisigSatisfied script signatories validRange wdrlMap =
-  case script of
+multisigSatisfied script signatories validRange wdrlMap = go script
+ where
+  go = \case
     SignatureD keyHash ->
-      listElem keyHash signatories
+      DList.elem keyHash signatories
     AllOfD scripts ->
-      listAll (\s -> multisigSatisfied s signatories validRange wdrlMap) scripts
+      DList.all go scripts
     AnyOfD scripts ->
-      listAny (\s -> multisigSatisfied s signatories validRange wdrlMap) scripts
+      DList.any go scripts
     AtLeastD required scripts ->
-      required <= listCount (\s -> multisigSatisfied s signatories validRange wdrlMap) scripts
-    BeforeD time ->
-      matchInterval validRange $ \_lb ub ->
-        matchUpperBound ub $ \ext isInclusive ->
-          matchExtended ext False (\(POSIXTime hi) -> if isInclusive then hi <= time else hi < time) False
-    AfterD time ->
-      matchInterval validRange $ \lb _ub ->
-        matchLowerBound lb $ \ext isInclusive ->
-          matchExtended ext False (\(POSIXTime lo) -> if isInclusive then time <= lo else time < lo) False
+      required <= DList.foldr (\sig acc -> acc + (if go sig then 1 else 0)) 0 scripts
+    BeforeD time -> case validRange of
+      Interval _ (UpperBound ext isInclusive) -> case ext of
+        Finite (POSIXTime hi) -> if isInclusive then hi <= time else hi < time
+        _ -> False
+    AfterD time -> case validRange of
+      Interval (LowerBound ext isInclusive) _ -> case ext of
+        Finite (POSIXTime lo) -> if isInclusive then time <= lo else time < lo
+        _ -> False
     ScriptWitD scriptHash ->
       pairsHasKey (ScriptCredential (ScriptHash (getPubKeyHash scriptHash))) wdrlMap
 
@@ -127,29 +109,18 @@ findOwnInput ref inputs =
 
 {-# INLINEABLE getOutputDatum #-}
 getOutputDatum :: TxOut -> SettingsDatumD
-getOutputDatum o =
-  matchOutputDatum
-    (txOutDatum o)
-    (error ())
-    (\_ -> error ())
-    (\(Datum d) -> unsafeFromBuiltinData d)
+getOutputDatum o = case txOutDatum o of
+  OutputDatum (Datum d) -> unsafeFromBuiltinData d
+  _ -> error ()
 
 {-# INLINEABLE valueWithoutLovelace #-}
 valueWithoutLovelace :: Value -> Value
 valueWithoutLovelace (Value v) =
   Value (DMap.delete (CurrencySymbol "") v)
 
-{-# INLINEABLE listHeadOutput #-}
-listHeadOutput :: DList.List TxOut -> TxOut
-listHeadOutput = DList.head
-
 {-# INLINEABLE valueIsZero #-}
 valueIsZero :: MintValue -> Bool
 valueIsZero mv = DMap.null (mintValueToMap mv)
-
-{-# INLINEABLE listAnyInput #-}
-listAnyInput :: (TxInInfo -> Bool) -> DList.List TxInInfo -> Bool
-listAnyInput = DList.any
 
 -- ============================================================================
 -- 4. Settings Admin Update
@@ -252,7 +223,7 @@ settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInf
   let ownInput = findOwnInput ownRef inputs
       TxInInfo _ ownResolved = ownInput
       TxOut ownAddress ownInputValue _ _ = ownResolved
-      ownOutput = listHeadOutput outputs
+      ownOutput = DList.head outputs
       TxOut ownOutputAddress ownOutputValue _ _ = ownOutput
       outputDatum = getOutputDatum ownOutput
       valueNotChanged = valueWithoutLovelace ownOutputValue == valueWithoutLovelace ownInputValue
@@ -307,19 +278,12 @@ mintsExactlyOneToken expectedCs expectedTn mv =
 findSettingsOutput :: CurrencySymbol -> DList.List TxOut -> Bool
 findSettingsOutput ownPolicyId =
   DList.any
-    ( \(TxOut addr _ d _) ->
-        matchCredential
-          (addressCredential addr)
-          (const False)
-          ( \sh ->
-              sh
-                == ScriptHash (unCurrencySymbol ownPolicyId)
-                && matchOutputDatum
-                  d
-                  False
-                  (const False)
-                  (const True)
-          )
+    ( \(TxOut addr _ d _) -> case addressCredential addr of
+        ScriptCredential sh ->
+          sh
+            == ScriptHash (unCurrencySymbol ownPolicyId)
+            && (case d of OutputDatum _ -> True; _ -> False)
+        _ -> False
     )
 
 {-# INLINEABLE settingsMintValidator #-}
@@ -329,7 +293,7 @@ settingsMintValidator bootUtxo ownPolicyId tx =
       mintsExactlyOne =
         mintsExactlyOneToken ownPolicyId (TokenName "settings") mint
       spendsBootUtxo =
-        listAnyInput (\inp -> txInInfoOutRef inp == bootUtxo) inputs
+        DList.any (\inp -> txInInfoOutRef inp == bootUtxo) inputs
       paysToSettingsScript =
         findSettingsOutput ownPolicyId outputs
    in mintsExactlyOne

@@ -17,7 +17,7 @@ import PlutusLedgerApi.V3 (Address, Credential, PubKeyHash)
 import PlutusTx qualified
 import PlutusTx.AsData (asData)
 import PlutusTx.Builtins (BuiltinData)
-import PlutusTx.IsData (makeIsDataIndexed)
+import PlutusTx.Data.List qualified as DL
 
 -- ============================================================================
 -- Plinth: MultisigScript
@@ -90,9 +90,9 @@ $( asData
      [d|
        data MultisigScriptD
          = SignatureD PubKeyHash
-         | AllOfD [MultisigScriptD]
-         | AnyOfD [MultisigScriptD]
-         | AtLeastD Integer [MultisigScriptD]
+         | AllOfD (DL.List MultisigScriptD)
+         | AnyOfD (DL.List MultisigScriptD)
+         | AtLeastD Integer (DL.List MultisigScriptD)
          | BeforeD Integer
          | AfterD Integer
          | ScriptWitD PubKeyHash

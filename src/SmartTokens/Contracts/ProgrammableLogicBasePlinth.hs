@@ -8,6 +8,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-callsite-growth=20 #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-unconditional-growth=20 #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
 
 module SmartTokens.Contracts.ProgrammableLogicBasePlinth (
@@ -21,6 +23,7 @@ import PlutusLedgerApi.Data.V3
 import PlutusLedgerApi.V1.Data.Value
 import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
+import PlutusTx.BuiltinList qualified as BuiltinList
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
@@ -78,19 +81,6 @@ consPair k v = BI.mkCons (BI.mkPairData k v)
 {-# INLINEABLE dlistToBI #-}
 dlistToBI :: DList.List a -> BIList
 dlistToBI = DList.toBuiltinList
-
-{-# INLINEABLE biDrop #-}
-biDrop :: Integer -> BIList -> BIList
-biDrop n xs
-  | n <= 0 = xs
-  | otherwise = Builtins.matchList' xs xs (\_ ys -> biDrop (n - 1) ys)
-
-{-# INLINEABLE biIndex #-}
-biIndex :: BIList -> Integer -> BI.BuiltinData
-biIndex xs n =
-  BI.unsafeCaseList
-    (\h t -> if n <= 0 then h else biIndex t (n - 1))
-    xs
 
 {-# INLINEABLE biReversePairs #-}
 biReversePairs :: BIPairs -> BIPairs
@@ -387,7 +377,7 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wd
         (\_ -> error ())
         ( \proofIdx proofsRest ->
             let currCS = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
-                TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
+                TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (refInputs BuiltinList.!! proofIdx)
                 TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
                 DirectorySetNodeD
                   { keyD = nodeKey
@@ -439,7 +429,7 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl t
             (\_ -> error ())
             ( \proofIdx proofsRest ->
                 let mintCs = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
-                    TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
+                    TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (refInputs BuiltinList.!! proofIdx)
                     TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
                     DirectorySetNodeD
                       { keyD = nodeKey
@@ -523,7 +513,7 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
            in biTokenPairsContain outputAccumulator finalDelta || error ()
       )
       ( \relIdx restIdxs ->
-          let dropped = biDrop relIdx remainingInputs
+          let dropped = BuiltinList.drop relIdx remainingInputs
            in BI.unsafeCaseList
                 ( \programmableInputData afterIdx ->
                     let TxInInfo _ inputTxOut = unsafeFromBuiltinData programmableInputData
@@ -657,8 +647,8 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
                 then ()
                 else error ()
         SeizeAct{plgrDirectoryNodeIdx, plgrInputIdxs, plgrOutputsStartIdx, plgrLengthInputIdxs} ->
-          let remainingOutputs = biDrop plgrOutputsStartIdx (dlistToBI outputs)
-              TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputsBIList plgrDirectoryNodeIdx)
+          let remainingOutputs = BuiltinList.drop plgrOutputsStartIdx (dlistToBI outputs)
+              TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (refInputsBIList BuiltinList.!! plgrDirectoryNodeIdx)
               TxOut{txOutValue = dirNodeValue} = dirNodeTxOut
               DirectorySetNodeD
                 { keyD = programmableCS
