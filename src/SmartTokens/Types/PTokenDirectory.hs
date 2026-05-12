@@ -67,8 +67,8 @@ pheadSingleton :: (PListLike list, PElemConstraint list a) => Term s (list a :--
 pheadSingleton = phoistAcyclic $
   plam $ \xs ->
     pelimList
-      (pelimList (\_ _ -> ptraceInfoError "List contains more than one element."))
-      (ptraceInfoError "List is empty.")
+      (pelimList (\_ _ -> perror))
+      perror
       xs
 
 pemptyBSData :: Term s (PAsData PByteString)
@@ -233,8 +233,8 @@ pisInsertedNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAs
 pisInsertedNode = phoistAcyclic $
   plam $ \insertedKey coveringNext outputNode ->
     pmatch (pfromData outputNode) $ \(PDirectorySetNode{ptransferLogicScript, pissuerLogicScript, pglobalStateCS}) ->
-      let transferLogicCred_ = ptraceInfoShowId ptransferLogicScript
-          issuerLogicCred_ = ptraceInfoShowId pissuerLogicScript
+      let transferLogicCred_ = ptransferLogicScript
+          issuerLogicCred_ = pissuerLogicScript
           expectedDirectoryNode =
             pmkDirectorySetNode # insertedKey # coveringNext # pdeserializeDirectoryCredential transferLogicCred_ # pdeserializeDirectoryCredential issuerLogicCred_ # pdeserializeCurrencySymbol pglobalStateCS
        in outputNode #== expectedDirectoryNode
@@ -249,9 +249,9 @@ pdeserializeDirectoryCredential term =
             [ (constrIdx #== 0, term)
             , (constrIdx #== 1, term)
             ]
-            (ptraceInfoError "Invalid credential")
+            perror
         )
-        (ptraceInfoError $ pconstant "Invalid credential len" <> pshow (plengthBS # (pasByteStr # (pheadSingleton # (psndBuiltin # constrPair)))))
+        perror
 
 pdeserializeCurrencySymbol :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PCurrencySymbol)
 pdeserializeCurrencySymbol term =
@@ -259,4 +259,4 @@ pdeserializeCurrencySymbol term =
     pif
       (plengthBS # bstr #<= 28)
       term
-      (ptraceInfoError $ pconstant "Invalid CurrencySymbol len" <> pshow (plengthBS # bstr))
+      perror

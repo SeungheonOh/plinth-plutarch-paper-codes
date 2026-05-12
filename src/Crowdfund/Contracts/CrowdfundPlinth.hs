@@ -45,7 +45,7 @@ findOwnInput :: TxOutRef -> DList.List TxInInfo -> TxInInfo
 findOwnInput ref inputs =
   case DList.find (\inp -> txInInfoOutRef inp == ref) inputs of
     Just x -> x
-    Nothing -> traceError "own input not found"
+    Nothing -> error ()
 
 {-# INLINEABLE getInputsByAddress #-}
 getInputsByAddress :: DList.List TxInInfo -> Address -> DList.List TxInInfo
@@ -100,8 +100,8 @@ getOutputDatum :: TxOut -> CrowdfundDatumD
 getOutputDatum o =
   matchOutputDatum
     (txOutDatum o)
-    (traceError "no inline datum")
-    (\_ -> traceError "no inline datum")
+    (error ())
+    (\_ -> error ())
     (\(Datum d) -> unsafeFromBuiltinData d)
 
 {-# INLINEABLE listLength #-}

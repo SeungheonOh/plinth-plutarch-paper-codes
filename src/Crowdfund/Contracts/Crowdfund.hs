@@ -46,10 +46,10 @@ pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
                     pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
                       pif (ptxInInfo'outRef #== ref) (pfromData inp) (self # rest)
                 )
-                (ptraceInfoError "own input not found")
+                perror
                 inputs
          in go # txInputs
-      _ -> ptraceInfoError "not spending"
+      _ -> perror
 
 pgetInputsByAddress :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PAddress :--> PBuiltinList (PAsData PTxInInfo))
 pgetInputsByAddress = phoistAcyclic $ pfix #$ plam $ \self inputs addr ->
@@ -145,8 +145,8 @@ pmapSize :: Term s (PMap any PPubKeyHash PInteger :--> PInteger)
 pmapSize = phoistAcyclic $ plam $ \m -> plistLength # pto m
 
 pfilterOutKey
-  :: forall (any :: KeyGuarantees) s.
-     Term
+  :: forall (any :: KeyGuarantees) s
+   . Term
        s
        ( PPubKeyHash
            :--> PMap any PPubKeyHash PInteger
@@ -171,7 +171,7 @@ pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
     pmatch ptxOut'datum $ \case
       POutputDatum d ->
         pfromData $ punsafeCoerce @(PAsData PCrowdfundDatum) (pto d)
-      _ -> ptraceInfoError "no inline datum"
+      _ -> perror
 
 -- ============================================================================
 -- 3. Donate

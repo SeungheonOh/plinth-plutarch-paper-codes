@@ -123,15 +123,15 @@ findOwnInput :: TxOutRef -> DList.List TxInInfo -> TxInInfo
 findOwnInput ref inputs =
   case DList.find (\inp -> txInInfoOutRef inp == ref) inputs of
     Just x -> x
-    Nothing -> traceError "own input not found"
+    Nothing -> error ()
 
 {-# INLINEABLE getOutputDatum #-}
 getOutputDatum :: TxOut -> SettingsDatumD
 getOutputDatum o =
   matchOutputDatum
     (txOutDatum o)
-    (traceError "no inline datum")
-    (\_ -> traceError "no inline datum")
+    (error ())
+    (\_ -> error ())
     (\(Datum d) -> unsafeFromBuiltinData d)
 
 {-# INLINEABLE valueWithoutLovelace #-}
@@ -310,15 +310,15 @@ findSettingsOutput ownPolicyId =
     ( \(TxOut addr _ d _) ->
         matchCredential
           (addressCredential addr)
-          (\_ -> False)
+          (const False)
           ( \sh ->
               sh
                 == ScriptHash (unCurrencySymbol ownPolicyId)
                 && matchOutputDatum
                   d
                   False
-                  (\_ -> False)
-                  (\_ -> True)
+                  (const False)
+                  (const True)
           )
     )
 

@@ -148,18 +148,18 @@ pmustBurnAllHeadTokens = phoistAcyclic $ plam $ \mintVal headCS parties ->
                 0
                 entries
          in go # mintMap
-   in ptraceIfFalse "H14" (burntTokens #== plistLength # parties + 1)
+   in (burntTokens #== plistLength # parties + 1)
 
 pmustNotMintOrBurn :: Term s (PTxInfo :--> PBool)
 pmustNotMintOrBurn = phoistAcyclic $ plam $ \txInfo ->
   pmatch txInfo $ \txI ->
     let mintVal = pto (pto (pfromData $ ptxInfo'mint txI))
-     in ptraceIfFalse "U01" (pnull # mintVal)
+     in (pnull # mintVal)
 
 pmustPreserveHeadValue :: Term s (PScriptContext :--> PBool)
 pmustPreserveHeadValue = phoistAcyclic $ plam $ \ctx ->
   pmatch (pfindOwnInput # ctx) $ \case
-    PNothing -> ptraceInfoError "H4"
+    PNothing -> perror
     PJust ownInput ->
       pmatch ownInput $ \(PTxInInfo{ptxInInfo'resolved = resolvedIn}) ->
         pmatch resolvedIn $ \(PTxOut{ptxOut'value = inValD}) ->
@@ -170,7 +170,7 @@ pmustPreserveHeadValue = phoistAcyclic $ plam $ \ctx ->
                in pmatch (pfromData firstOut) $ \(PTxOut{ptxOut'value = outValD}) ->
                     let inVal = pfromData inValD
                         outVal = pfromData outValD
-                     in ptraceIfFalse "H4" (pvalueGeq # outVal # inVal)
+                     in (pvalueGeq # outVal # inVal)
 
 pfindOwnInput :: Term s (PScriptContext :--> PMaybe PTxInInfo)
 pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
@@ -291,14 +291,14 @@ pgetHeadInput :: Term s (PScriptContext :--> PTxInInfo)
 pgetHeadInput = phoistAcyclic $ plam $ \ctx ->
   pmatch (pfindOwnInput # ctx) $ \case
     PJust x -> x
-    PNothing -> ptraceInfoError "H8"
+    PNothing -> perror
 
 pgetHeadAddress :: Term s (PScriptContext :--> PAddress)
 pgetHeadAddress = phoistAcyclic $ plam $ \ctx ->
   pmatch (pfindOwnInput # ctx) $ \case
     PJust ownInput -> pmatch ownInput $ \(PTxInInfo{ptxInInfo'resolved}) ->
       pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'address}) -> ptxOut'address
-    PNothing -> ptraceInfoError "H8"
+    PNothing -> perror
 
 pmustNotChangeParameters
   :: Term
@@ -312,13 +312,12 @@ pmustNotChangeParameters
            :--> PBool
        )
 pmustNotChangeParameters = phoistAcyclic $ plam $ \prevParties nextParties prevCperiod nextCperiod prevHeadId nextHeadId ->
-  ptraceIfFalse "H2" $
-    pdata prevParties
-      #== pdata nextParties
-      #&& prevCperiod
-      #== nextCperiod
-      #&& prevHeadId
-      #== nextHeadId
+  pdata prevParties
+    #== pdata nextParties
+    #&& prevCperiod
+    #== nextCperiod
+    #&& prevHeadId
+    #== nextHeadId
 
 pmakeContestationDeadline :: Term s (PInteger :--> PScriptContext :--> PInteger)
 pmakeContestationDeadline = phoistAcyclic $ plam $ \cperiod ctx ->
@@ -328,7 +327,7 @@ pmakeContestationDeadline = phoistAcyclic $ plam $ \cperiod ctx ->
         pmatch ub $ \(PUpperBound ext _) ->
           pmatch ext $ \case
             PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t) + cperiod
-            _ -> ptraceInfoError "H27"
+            _ -> perror
 
 pheadOutputDatum :: Term s (PScriptContext :--> PDatum)
 pheadOutputDatum = phoistAcyclic $ plam $ \ctx ->
@@ -342,23 +341,23 @@ pheadOutputDatum = phoistAcyclic $ plam $ \ctx ->
                   (ptxOut'address #== headAddr)
                   ( pmatch ptxOut'datum $ \case
                       POutputDatum d -> d
-                      _ -> ptraceInfoError "H9"
+                      _ -> perror
                   )
-                  (ptraceInfoError "H11")
+                  perror
 
 pdecodeHeadOutputClosedDatum :: Term s (PScriptContext :--> PClosedDatum)
 pdecodeHeadOutputClosedDatum = phoistAcyclic $ plam $ \ctx ->
   let datum = pheadOutputDatum # ctx
    in pmatch (pfromData $ punsafeCoerce @(PAsData PState) (pto datum)) $ \case
         PClosed closedAsData -> pfromData closedAsData
-        _ -> ptraceInfoError "H3"
+        _ -> perror
 
 pdecodeHeadOutputOpenDatum :: Term s (PScriptContext :--> POpenDatum)
 pdecodeHeadOutputOpenDatum = phoistAcyclic $ plam $ \ctx ->
   let datum = pheadOutputDatum # ctx
    in pmatch (pfromData $ punsafeCoerce @(PAsData PState) (pto datum)) $ \case
         POpen openAsData -> pfromData openAsData
-        _ -> ptraceInfoError "H3"
+        _ -> perror
 
 pfindParticipationTokens :: Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PAsData PTokenName))
 pfindParticipationTokens = phoistAcyclic $ plam $ \headCS v ->
@@ -398,7 +397,7 @@ pmustBeSignedByParticipant = phoistAcyclic $ plam $ \ctx headCS ->
        in pelimList
             ( \signer rest ->
                 pelimList
-                  (\_ _ -> ptraceInfoError "H7")
+                  (\_ _ -> perror)
                   ( let signerBytes = pmatch (pfromData signer) $ \(PPubKeyHash bbs) -> bbs
                         allPTs = pfix #$ plam $ \self inps ->
                           pelimList
@@ -412,11 +411,11 @@ pmustBeSignedByParticipant = phoistAcyclic $ plam $ \ctx headCS ->
                             inps
                         pts = allPTs # inputs
                         ptBytes = pmap # plam (\tn -> pmatch (pfromData tn) $ \(PTokenName bs) -> bs) # pts
-                     in ptraceIfFalse "H5" (plistElem # signerBytes # ptBytes)
+                     in (plistElem # signerBytes # ptBytes)
                   )
                   rest
             )
-            (ptraceInfoError "H6")
+            perror
             signatories
  where
   plistAppend :: (PIsListLike l a) => Term s (l a :--> l a :--> l a)
@@ -468,7 +467,7 @@ pverifySnapshotSignature = phoistAcyclic $ plam $ \parties headId version snapsh
           )
           (pconstant True)
           ps
-   in ptraceIfFalse "H12" (numParties #== numSigs #&& verifyAll # parties # sigs)
+   in (numParties #== numSigs #&& verifyAll # parties # sigs)
 
 -- ============================================================================
 -- 8. checkIncrement
@@ -517,7 +516,7 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
       depositInput =
         pmatch (plistFind # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef #== incRef) # inputs) $ \case
           PJust i -> pfromData i
-          PNothing -> ptraceInfoError "H44"
+          PNothing -> perror
 
       depositTxOut = pmatch depositInput $ \(PTxInInfo{ptxInInfo'resolved}) -> ptxInInfo'resolved
       commits = pdepositDatum # depositTxOut
@@ -528,7 +527,7 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
       headInValue =
         pmatch (plistFind # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> phasST # prevHeadId # pfromData valD) # inputs) $ \case
           PJust i -> pmatch (pfromData i) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> pfromData valD
-          PNothing -> ptraceInfoError "H45"
+          PNothing -> perror
 
       -- Get head output value (first output)
       headOutValue = pmatch (pfromData (phead # outputs)) $ \(PTxOut{ptxOut'value = valD}) -> pfromData valD
@@ -543,12 +542,10 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
           # pfromData nextHeadIdD
 
       mustIncreaseVersion =
-        ptraceIfFalse "H21" $
-          nextVersion #== prevVersion + 1
+        nextVersion #== prevVersion + 1
 
       mustIncreaseValue =
-        ptraceIfFalse "H4" $
-          pdata (headInValue <> depositValue) #== pdata headOutValue
+        pdata (headInValue <> depositValue) #== pdata headOutValue
 
       signedByParticipant = pmustBeSignedByParticipant # ctx # prevHeadId
 
@@ -564,9 +561,8 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
           # pfromData sigD
 
       claimedDepositIsSpent =
-        ptraceIfFalse "H43" $
-          let inputRefs = pmap # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef) # inputs
-           in plistElem # incRef # inputRefs
+        let inputRefs = pmap # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef) # inputs
+         in plistElem # incRef # inputRefs
 
   pcheck $
     mustNotChangeParams
@@ -639,8 +635,7 @@ pcheckDecrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
           # pfromData nextHeadIdD
 
       mustIncreaseVersion =
-        ptraceIfFalse "H21" $
-          nextVersion #== prevVersion + 1
+        nextVersion #== prevVersion + 1
 
       checkSnapshotSignature =
         pverifySnapshotSignature
@@ -654,8 +649,7 @@ pcheckDecrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
           # pfromData sigD
 
       mustDecreaseValue =
-        ptraceIfFalse "H4" $
-          pdata headInValue #== pdata (headOutValue <> decommitValue)
+        pdata headInValue #== pdata (headOutValue <> decommitValue)
 
       signedByParticipant = pmustBeSignedByParticipant # ctx # prevHeadId
 
@@ -711,117 +705,109 @@ pcheckClose = phoistAcyclic $ plam $ \ctx openBefore closeRed -> P.do
         pmatch ub $ \(PUpperBound ext _) ->
           pmatch ext $ \case
             PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t)
-            _ -> ptraceInfoError "H24"
+            _ -> perror
 
       tMin = pmatch ptxInfo'validRange $ \(PInterval lb _) ->
         pmatch lb $ \(PLowerBound ext _) ->
           pmatch ext $ \case
             PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t)
-            _ -> ptraceInfoError "H25"
+            _ -> perror
 
-      hasBoundedValidity = ptraceIfFalse "H22" (tMax - tMin #<= prevCperiod)
+      hasBoundedValidity = tMax - tMin #<= prevCperiod
       noMintBurn = pmustNotMintOrBurn # pscriptContext'txInfo
       checkDeadline =
-        ptraceIfFalse "H23" $
-          pfromData nextDeadlineD #== tMax + prevCperiod
+        pfromData nextDeadlineD #== tMax + prevCperiod
       signedByParticipant = pmustBeSignedByParticipant # ctx # prevHeadId
-      mustNotChangeVersion = ptraceIfFalse "H13" (nextVersion #== prevVersion)
-      mustInitContesters = ptraceIfFalse "H26" (pnull # pfromData nextContestersD)
+      mustNotChangeVersion = nextVersion #== prevVersion
+      mustInitContesters = pnull # pfromData nextContestersD
       mustNotChangeParams =
-        ptraceIfFalse "H2" $
-          nextPartiesD
-            #== prevPartiesD
-            #&& nextCperiodD
-            #== prevCperiodD
-            #&& nextHeadIdD
-            #== prevHeadIdD
+        nextPartiesD
+          #== prevPartiesD
+          #&& nextCperiodD
+          #== prevCperiodD
+          #&& nextHeadIdD
+          #== prevHeadIdD
 
       mustBeValidSnapshot = pmatch closeRed $ \case
         PCloseInitial ->
-          ptraceIfFalse "H28" $
-            prevVersion
-              #== 0
-              #&& pfromData nextSnD
-              #== 0
-              #&& nextUtxoHashD
-              #== initialUtxoHashD
+          prevVersion
+            #== 0
+            #&& pfromData nextSnD
+            #== 0
+            #&& nextUtxoHashD
+            #== initialUtxoHashD
         PCloseAny{pcloseAnySig = sigD} ->
-          ptraceIfFalse "H46" $
-            pfromData nextSnD
-              #> 0
-              #&& nextAlphaD
-              #== pdata pemptyHash
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # prevParties
-              # prevHeadId
-              # prevVersion
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pemptyHash
-              # pfromData sigD
+          pfromData nextSnD
+            #> 0
+            #&& nextAlphaD
+            #== pdata pemptyHash
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # prevParties
+            # prevHeadId
+            # prevVersion
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pemptyHash
+            # pfromData sigD
         PCloseUnusedDec{pcloseUnusedDecSig = sigD} ->
-          ptraceIfFalse "H50" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& pnot
-              # (nextOmegaD #== pdata pemptyHash)
-              #&& pverifySnapshotSignature
-              # prevParties
-              # prevHeadId
-              # prevVersion
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pfromData nextOmegaD
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& pnot
+            # (nextOmegaD #== pdata pemptyHash)
+            #&& pverifySnapshotSignature
+            # prevParties
+            # prevHeadId
+            # prevVersion
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pfromData nextOmegaD
+            # pfromData sigD
         PCloseUsedDec{pcloseUsedDecSig = sigD, pcloseUsedDecAlreadyDecommitted = adD} ->
-          ptraceIfFalse "H51" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # prevParties
-              # prevHeadId
-              # (prevVersion - 1)
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pfromData adD
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # prevParties
+            # prevHeadId
+            # (prevVersion - 1)
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pfromData adD
+            # pfromData sigD
         PCloseUnusedInc{pcloseUnusedIncSig = sigD, pcloseUnusedIncAlreadyCommitted = acD} ->
-          ptraceIfFalse "H52" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # prevParties
-              # prevHeadId
-              # prevVersion
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pfromData acD
-              # pemptyHash
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # prevParties
+            # prevHeadId
+            # prevVersion
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pfromData acD
+            # pemptyHash
+            # pfromData sigD
         PCloseUsedInc{pcloseUsedIncSig = sigD, pcloseUsedIncAlreadyCommitted = acD} ->
-          ptraceIfFalse "H53" $
-            nextAlphaD
-              #== acD
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # prevParties
-              # prevHeadId
-              # (prevVersion - 1)
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pfromData acD
-              # pemptyHash
-              # pfromData sigD
+          nextAlphaD
+            #== acD
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # prevParties
+            # prevHeadId
+            # (prevVersion - 1)
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pfromData acD
+            # pemptyHash
+            # pfromData sigD
   let preserveHeadValue = pmustPreserveHeadValue # ctx
   pcheck $
     noMintBurn
@@ -883,83 +869,76 @@ pcheckContest = phoistAcyclic $ plam $ \ctx closedDatum contestRed -> P.do
       noMintBurn = pmustNotMintOrBurn # pscriptContext'txInfo
 
       mustNotChangeVersion =
-        ptraceIfFalse "H13" $
-          nextVersion #== version
+        nextVersion #== version
 
       mustBeNewer =
-        ptraceIfFalse "H29" $
-          pfromData nextSnD #> snapshotNum
+        pfromData nextSnD #> snapshotNum
 
       mustBeValidSnapshot = pmatch contestRed $ \case
         PContestCurrent{pcontestCurrentSig = sigD} ->
-          ptraceIfFalse "H37" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # parties
-              # headId
-              # version
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pemptyHash
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # parties
+            # headId
+            # version
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pemptyHash
+            # pfromData sigD
         PContestUsedDec{pcontestUsedDecSig = sigD, pcontestUsedDecAlreadyDecommitted = adD} ->
-          ptraceIfFalse "H38" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # parties
-              # headId
-              # (version - 1)
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pfromData adD
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # parties
+            # headId
+            # (version - 1)
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pfromData adD
+            # pfromData sigD
         PContestUnusedDec{pcontestUnusedDecSig = sigD} ->
-          ptraceIfFalse "H47" $
-            nextAlphaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # parties
-              # headId
-              # version
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pemptyHash
-              # pfromData nextOmegaD
-              # pfromData sigD
+          nextAlphaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # parties
+            # headId
+            # version
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pemptyHash
+            # pfromData nextOmegaD
+            # pfromData sigD
         PContestUnusedInc{pcontestUnusedIncSig = sigD, pcontestUnusedIncAlreadyCommitted = acD} ->
-          ptraceIfFalse "H48" $
-            nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # parties
-              # headId
-              # (version - 1)
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pfromData acD
-              # pemptyHash
-              # pfromData sigD
+          nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # parties
+            # headId
+            # (version - 1)
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pfromData acD
+            # pemptyHash
+            # pfromData sigD
         PContestUsedInc{pcontestUsedIncSig = sigD} ->
-          ptraceIfFalse "H49" $
-            nextOmegaD
-              #== pdata pemptyHash
-              #&& pverifySnapshotSignature
-              # parties
-              # headId
-              # version
-              # pfromData nextSnD
-              # pfromData nextUtxoHashD
-              # pfromData nextAlphaD
-              # pemptyHash
-              # pfromData sigD
+          nextOmegaD
+            #== pdata pemptyHash
+            #&& pverifySnapshotSignature
+            # parties
+            # headId
+            # version
+            # pfromData nextSnD
+            # pfromData nextUtxoHashD
+            # pfromData nextAlphaD
+            # pemptyHash
+            # pfromData sigD
 
       signedByParticipant = pmustBeSignedByParticipant # ctx # headId
 
@@ -968,11 +947,11 @@ pcheckContest = phoistAcyclic $ plam $ \ctx closedDatum contestRed -> P.do
         pelimList
           ( \signer rest ->
               pelimList
-                (\_ _ -> ptraceInfoError "H35")
+                (\_ _ -> perror)
                 signer
                 rest
           )
-          (ptraceInfoError "H35")
+          perror
           (pfromData ptxInfo'signatories)
 
       checkSignedParticipantContestOnlyOnce =
@@ -981,31 +960,24 @@ pcheckContest = phoistAcyclic $ plam $ \ctx closedDatum contestRed -> P.do
                 (\h t -> pif (h #== x) (pconstant False) (self # x # t))
                 (pconstant True)
                 xs
-         in ptraceIfFalse "H36" $
-              goNotElem # contester # contesters
+         in goNotElem # contester # contesters
 
       mustBeWithinContestationPeriod =
         pmatch ptxInfo'validRange $ \(PInterval _ ub) ->
           pmatch ub $ \(PUpperBound ext _) ->
             pmatch ext $ \case
               PFinite t ->
-                ptraceIfFalse "H30" $
-                  pfromData (punsafeCoerce @(PAsData PInteger) t) #<= contestationDeadline
-              _ -> ptraceInfoError "H31"
+                pfromData (punsafeCoerce @(PAsData PInteger) t) #<= contestationDeadline
+              _ -> perror
 
       mustUpdateContesters =
-        ptraceIfFalse "H34" $
-          pfromData nextContestersD #== (pcons # contester # contesters)
+        pfromData nextContestersD #== (pcons # contester # contesters)
 
       mustPushDeadline =
         pif
           (plistLength # pfromData nextContestersD #== plistLength # parties)
-          ( ptraceIfFalse "H32" $
-              pfromData nextDeadlineD #== contestationDeadline
-          )
-          ( ptraceIfFalse "H33" $
-              pfromData nextDeadlineD #== contestationDeadline + contestationPeriod
-          )
+          (pfromData nextDeadlineD #== contestationDeadline)
+          (pfromData nextDeadlineD #== contestationDeadline + contestationPeriod)
 
       mustNotChangeParams =
         pmustNotChangeParameters
@@ -1062,22 +1034,22 @@ pheadIsFinalizedWith = phoistAcyclic $ plam $ \ctx closedDatum numFanout numComm
 
       fanoutOutputs = plistTake # numFanout # outputs
       fannedOutHash = phashTxOuts # fanoutOutputs
-      hasSameUtxoHash = ptraceIfFalse "H39" (fannedOutHash #== utxoHash)
+      hasSameUtxoHash = fannedOutHash #== utxoHash
 
       commitOutputs = plistTake # numCommit # (plistDrop # numFanout # outputs)
       commitHash = phashTxOuts # commitOutputs
-      hasSameCommitHash = ptraceIfFalse "H54" (pdata alphaHash #== pdata commitHash)
+      hasSameCommitHash = pdata alphaHash #== pdata commitHash
 
       decommitOutputs = plistTake # numDecommit # (plistDrop # numFanout # outputs)
       decommitHash = phashTxOuts # decommitOutputs
-      hasSameDecommitHash = ptraceIfFalse "H40" (pdata omegaHash #== pdata decommitHash)
+      hasSameDecommitHash = pdata omegaHash #== pdata decommitHash
 
       afterDeadline =
         pmatch ptxInfo'validRange $ \(PInterval lb _) ->
           pmatch lb $ \(PLowerBound ext _) ->
             pmatch ext $ \case
-              PFinite t -> ptraceIfFalse "H41" (pfromData (punsafeCoerce @(PAsData PInteger) t) #> deadline)
-              _ -> ptraceInfoError "H42"
+              PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t) #> deadline
+              _ -> perror
 
   pcheck $
     burnOk
@@ -1106,14 +1078,14 @@ mkHeadValidator = plam $ \ctx ->
                           PIncrement{pinput'increment = incD} -> pcheckIncrement # ctx # openDatum # pfromData incD
                           PDecrement{pinput'decrement = decD} -> pcheckDecrement # ctx # openDatum # pfromData decD
                           PClose{pinput'close = closeD} -> pcheckClose # ctx # openDatum # pfromData closeD
-                          _ -> ptraceInfoError "H1"
+                          _ -> perror
                   PClosed closedAsData ->
                     let closedDatum = pfromData closedAsData
                      in pmatch input $ \case
                           PContest{pinput'contest = contestD} -> pcheckContest # ctx # closedDatum # pfromData contestD
                           PFanout{pfanoutNumberOfFanoutOutputs, pfanoutNumberOfCommitOutputs, pfanoutNumberOfDecommitOutputs} ->
                             pheadIsFinalizedWith # ctx # closedDatum # pfromData pfanoutNumberOfFanoutOutputs # pfromData pfanoutNumberOfCommitOutputs # pfromData pfanoutNumberOfDecommitOutputs
-                          _ -> ptraceInfoError "H1"
-                  PFinal -> ptraceInfoError "H1"
+                          _ -> perror
+                  PFinal -> perror
           PDNothing -> perror
       _ -> perror

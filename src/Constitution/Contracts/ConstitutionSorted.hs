@@ -262,8 +262,8 @@ pwithChangedParams = phoistAcyclic $ plam $ \config ctx ->
                     )
                   , (govIdx #== 2, pconstant True)
                   ]
-                  (ptraceInfoError "C1")
-      _ -> ptraceInfoError "C2"
+                  perror
+      _ -> perror
 
 -- ============================================================================
 -- 7. Main validator

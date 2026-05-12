@@ -45,10 +45,10 @@ pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
                     pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
                       pif (ptxInInfo'outRef #== ref) (pfromData inp) (self # rest)
                 )
-                (ptraceInfoError "own input not found")
+                perror
                 inputs
          in go # txInputs
-      _ -> ptraceInfoError "not spending"
+      _ -> perror
 
 pgetOutputsByAddress :: Term s (PBuiltinList (PAsData PTxOut) :--> PAddress :--> PBuiltinList (PAsData PTxOut))
 pgetOutputsByAddress = phoistAcyclic $ pfix #$ plam $ \self outputs addr ->
@@ -173,7 +173,7 @@ pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
     pmatch ptxOut'datum $ \case
       POutputDatum d ->
         pfromData $ punsafeCoerce @(PAsData PVestingDatum) (pto d)
-      _ -> ptraceInfoError "no inline datum"
+      _ -> perror
 
 -- ============================================================================
 -- 3. Linear vesting formula

@@ -63,12 +63,12 @@ listAll p (x : xs) = p x && listAll p xs
 {-# INLINEABLE listHead #-}
 listHead :: [a] -> a
 listHead (x : _) = x
-listHead [] = traceError "empty list"
+listHead [] = error ()
 
 {-# INLINEABLE listTail #-}
 listTail :: [a] -> [a]
 listTail (_ : xs) = xs
-listTail [] = traceError "empty list"
+listTail [] = error ()
 
 {-# INLINEABLE listNull #-}
 listNull :: [a] -> Bool
@@ -118,8 +118,7 @@ hasST headPolicyId v =
 {-# INLINEABLE mustBurnAllHeadTokens #-}
 mustBurnAllHeadTokens :: Value -> CurrencySymbol -> [BuiltinByteString] -> Bool
 mustBurnAllHeadTokens mintVal headCurrencySymbol parties =
-  traceIfFalse "H14"
-    $ burntTokens
+  burntTokens
     == listLength parties
     + 1
  where
@@ -131,16 +130,14 @@ mustBurnAllHeadTokens mintVal headCurrencySymbol parties =
 {-# INLINEABLE mustNotMintOrBurn #-}
 mustNotMintOrBurn :: MintValue -> Bool
 mustNotMintOrBurn mint =
-  traceIfFalse "U01"
-    $ Map.null
+  Map.null
     $ getValue
     $ unsafeFromBuiltinData (toBuiltinData mint)
 
 {-# INLINEABLE mustPreserveHeadValue #-}
 mustPreserveHeadValue :: [TxOut] -> TxOutRef -> [TxInInfo] -> Bool
 mustPreserveHeadValue outputs ownRef inputs =
-  traceIfFalse "H4"
-    $ val'
+  val'
     `geq` val
  where
   val = case findOwnInput ownRef inputs of
@@ -206,7 +203,7 @@ depositDatum txOut =
 {-# INLINEABLE getHeadInput #-}
 getHeadInput :: TxOutRef -> [TxInInfo] -> TxInInfo
 getHeadInput ownRef inputs = case findOwnInput ownRef inputs of
-  Nothing -> traceError "H8"
+  Nothing -> error ()
   Just x -> x
 
 {-# INLINEABLE getHeadAddress #-}
@@ -220,8 +217,7 @@ mustNotChangeParameters
   -> (CurrencySymbol, CurrencySymbol)
   -> Bool
 mustNotChangeParameters (parties', parties) (cp', cp) (headId', headId) =
-  traceIfFalse "H2"
-    $ parties'
+  parties'
     == parties
     && cp'
     == cp
@@ -233,10 +229,9 @@ mustBeSignedByParticipant :: [PubKeyHash] -> [TxInInfo] -> CurrencySymbol -> Boo
 mustBeSignedByParticipant signatories inputs headCurrencySymbol =
   case getPubKeyHash <$> signatories of
     [signer] ->
-      traceIfFalse "H5"
-        $ listElem signer (unTokenName <$> participationTokens)
-    [] -> traceError "H6"
-    _ -> traceError "H7"
+      listElem signer (unTokenName <$> participationTokens)
+    [] -> error ()
+    _ -> error ()
  where
   participationTokens = go inputs
   go [] = []
@@ -256,14 +251,14 @@ headOutputDatum outputs ownRef inputs =
   case outputs of
     (o : _)
       | txOutAddress o == getHeadAddress ownRef inputs -> getTxOutDatum o
-    _ -> traceError "H11"
+    _ -> error ()
 
 {-# INLINEABLE getTxOutDatum #-}
 getTxOutDatum :: TxOut -> Datum
 getTxOutDatum o =
   case txOutDatum o of
-    NoOutputDatum -> traceError "H9"
-    OutputDatumHash _ -> traceError "H10"
+    NoOutputDatum -> error ()
+    OutputDatumHash _ -> error ()
     OutputDatum d -> d
 
 {-# INLINEABLE makeContestationDeadline #-}
@@ -271,21 +266,21 @@ makeContestationDeadline :: Integer -> POSIXTimeRange -> POSIXTime
 makeContestationDeadline cperiod validRange =
   case ivTo validRange of
     UpperBound (Finite time) _ -> addContestationPeriod time cperiod
-    _ -> traceError "H27"
+    _ -> error ()
 
 {-# INLINEABLE decodeHeadOutputClosedDatum #-}
 decodeHeadOutputClosedDatum :: [TxOut] -> TxOutRef -> [TxInInfo] -> ClosedDatum
 decodeHeadOutputClosedDatum outputs ownRef inputs =
   case fromBuiltinData @State $ getDatum (headOutputDatum outputs ownRef inputs) of
     Just (Closed closedDatum) -> closedDatum
-    _ -> traceError "H3"
+    _ -> error ()
 
 {-# INLINEABLE decodeHeadOutputOpenDatum #-}
 decodeHeadOutputOpenDatum :: [TxOut] -> TxOutRef -> [TxInInfo] -> OpenDatum
 decodeHeadOutputOpenDatum outputs ownRef inputs =
   case fromBuiltinData @State $ getDatum (headOutputDatum outputs ownRef inputs) of
     Just (Open openDatum) -> openDatum
-    _ -> traceError "H3"
+    _ -> error ()
 
 -- ============================================================================
 -- 7. Snapshot signature verification
@@ -294,8 +289,7 @@ decodeHeadOutputOpenDatum outputs ownRef inputs =
 {-# INLINEABLE verifySnapshotSignature #-}
 verifySnapshotSignature :: [BuiltinByteString] -> (CurrencySymbol, SnapshotVersion, SnapshotNumber, Hash, Hash, Hash) -> [Signature] -> Bool
 verifySnapshotSignature parties msg sigs =
-  traceIfFalse "H12"
-    $ listLength parties
+  listLength parties
     == listLength sigs
     && listAll (uncurry $ verifyPartySignature msg) (L.zip parties sigs)
 
@@ -330,7 +324,7 @@ checkIncrement ownRef txInfo openBefore redeemer =
 
   depositInput =
     case listFind (\(TxInInfo ref _) -> ref == incrementRef redeemer) inputs of
-      Nothing -> traceError "H44"
+      Nothing -> error ()
       Just i -> i
 
   commits = depositDatum $ txInInfoResolved depositInput
@@ -339,7 +333,7 @@ checkIncrement ownRef txInfo openBefore redeemer =
 
   headInValue =
     case listFind (\(TxInInfo _ o) -> hasST prevHeadId (txOutValue o)) inputs of
-      Nothing -> traceError "H45"
+      Nothing -> error ()
       Just (TxInInfo _ o) -> txOutValue o
 
   headOutValue = txOutValue $ listHead outputs
@@ -347,21 +341,18 @@ checkIncrement ownRef txInfo openBefore redeemer =
   IncrementRedeemer{incrementSig = sig, incrementSnapshotNumber = sn, incrementRef = _} = redeemer
 
   claimedDepositIsSpent =
-    traceIfFalse "H43"
-      $ listElem (incrementRef redeemer) (txInInfoOutRef <$> inputs)
+    listElem (incrementRef redeemer) (txInInfoOutRef <$> inputs)
 
   checkSnapshotSignature =
     verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, depositHash, emptyHash) sig
 
   mustIncreaseVersion =
-    traceIfFalse "H21"
-      $ nextVersion
+    nextVersion
       == prevVersion
       + 1
 
   mustIncreaseValue =
-    traceIfFalse "H4"
-      $ headInValue
+    headInValue
       <> depositValue
       == headOutValue
 
@@ -387,14 +378,12 @@ checkDecrement ownRef txInfo openBefore redeemer =
     verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, emptyHash, decommitUtxoHash) sig
 
   mustDecreaseValue =
-    traceIfFalse "H4"
-      $ headInValue
+    headInValue
       == headOutValue
       <> F.foldMap txOutValue decommitOutputs
 
   mustIncreaseVersion =
-    traceIfFalse "H21"
-      $ nextVersion
+    nextVersion
       == prevVersion
       + 1
 
@@ -436,29 +425,25 @@ checkClose ownRef txInfo openBefore redeemer =
   closedOut = decodeHeadOutputClosedDatum outputs ownRef inputs
 
   hasBoundedValidity =
-    traceIfFalse "H22"
-      $ tMax
+    tMax
       - tMin
       <= POSIXTime cperiod
 
   mustNotChangeVersion =
-    traceIfFalse "H13"
-      $ closedVersion closedOut
+    closedVersion closedOut
       == version
 
   mustBeValidSnapshot =
     case redeemer of
       CloseInitial ->
-        traceIfFalse "H28"
-          $ version
+        version
           == 0
           && closedSnapshotNumber closedOut
           == 0
           && closedUtxoHash closedOut
           == initialUtxoHash
       CloseAny{closeAnySig = sig} ->
-        traceIfFalse "H46"
-          $ closedSnapshotNumber closedOut
+        closedSnapshotNumber closedOut
           > 0
           && closedAlphaUTxOHash closedOut
           == emptyHash
@@ -466,52 +451,46 @@ checkClose ownRef txInfo openBefore redeemer =
           == emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash) sig
       CloseUnusedDec{closeUnusedDecSig = sig} ->
-        traceIfFalse "H50"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           /= emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, closedOmegaUTxOHash closedOut) sig
       CloseUsedDec{closeUsedDecSig = sig, closeUsedDecAlreadyDecommitted = alreadyDecommitted} ->
-        traceIfFalse "H51"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, alreadyDecommitted) sig
       CloseUnusedInc{closeUnusedIncSig = sig, closeUnusedIncAlreadyCommitted = alreadyCommitted} ->
-        traceIfFalse "H52"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
       CloseUsedInc{closeUsedIncSig = sig, closeUsedIncAlreadyCommitted = alreadyCommitted} ->
-        traceIfFalse "H53"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == alreadyCommitted
           && closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
 
   checkDeadline =
-    traceIfFalse "H23"
-      $ closedContestationDeadline closedOut
+    closedContestationDeadline closedOut
       == makeContestationDeadline cperiod validRange
 
   cp = POSIXTime cperiod
 
   tMax = case ivTo validRange of
     UpperBound (Finite t) _ -> t
-    _ -> traceError "H24"
+    _ -> error ()
 
   tMin = case ivFrom validRange of
     LowerBound (Finite t) _ -> t
-    _ -> traceError "H25"
+    _ -> error ()
 
   mustInitializeContesters =
-    traceIfFalse "H26"
-      $ listNull (closedContesters closedOut)
+    listNull (closedContesters closedOut)
 
 -- ============================================================================
 -- 11. checkContest
@@ -543,80 +522,68 @@ checkContest ownRef txInfo closedDatum redeemer =
   contesters = closedContesters closedDatum
 
   mustBeNewer =
-    traceIfFalse "H29"
-      $ closedSnapshotNumber closedOut
+    closedSnapshotNumber closedOut
       > snapshotNum
 
   mustNotChangeVersion =
-    traceIfFalse "H13"
-      $ closedVersion closedOut
+    closedVersion closedOut
       == version
 
   mustBeValidSnapshot =
     case redeemer of
       ContestCurrent{contestCurrentSig = sig} ->
-        traceIfFalse "H37"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash) sig
       ContestUsedDec{contestUsedDecSig = sig, contestUsedDecAlreadyDecommitted = alreadyDecommitted} ->
-        traceIfFalse "H38"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, alreadyDecommitted) sig
       ContestUnusedDec{contestUnusedDecSig = sig} ->
-        traceIfFalse "H47"
-          $ closedAlphaUTxOHash closedOut
+        closedAlphaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, closedOmegaUTxOHash closedOut) sig
       ContestUnusedInc{contestUnusedIncSig = sig, contestUnusedIncAlreadyCommitted = alreadyCommitted} ->
-        traceIfFalse "H48"
-          $ closedOmegaUTxOHash closedOut
+        closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
       ContestUsedInc{contestUsedIncSig = sig} ->
-        traceIfFalse "H49"
-          $ closedOmegaUTxOHash closedOut
+        closedOmegaUTxOHash closedOut
           == emptyHash
           && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, closedAlphaUTxOHash closedOut, emptyHash) sig
 
   mustBeWithinContestationPeriod =
     case ivTo validRange of
       UpperBound (Finite time) _ ->
-        traceIfFalse "H30"
-          $ time
+        time
           <= contestationDeadline
-      _ -> traceError "H31"
+      _ -> error ()
 
   mustPushDeadline =
     if listLength (closedContesters closedOut) == listLength parties
       then
-        traceIfFalse "H32"
-          $ closedContestationDeadline closedOut
+        closedContestationDeadline closedOut
           == contestationDeadline
       else
-        traceIfFalse "H33"
-          $ closedContestationDeadline closedOut
+        closedContestationDeadline closedOut
           == addContestationPeriod contestationDeadline contestationPeriod
 
   mustUpdateContesters =
-    traceIfFalse "H34"
-      $ closedContesters closedOut
+    closedContesters closedOut
       == contester
       : contesters
 
   contester =
     case signatories of
       [signer] -> signer
-      _ -> traceError "H35"
+      _ -> error ()
 
   checkSignedParticipantContestOnlyOnce =
-    traceIfFalse "H36"
-      $ listNotElem contester contesters
+    listNotElem contester contesters
 
 -- ============================================================================
 -- 12. headIsFinalizedWith (Fanout)
@@ -641,27 +608,23 @@ headIsFinalizedWith txInfo closedDatum numberOfFanoutOutputs numberOfCommitOutpu
   contestationDeadline = closedContestationDeadline closedDatum
 
   hasSameUTxOHash =
-    traceIfFalse "H39"
-      $ hashTxOuts (listTake numberOfFanoutOutputs outputs)
+    hashTxOuts (listTake numberOfFanoutOutputs outputs)
       == utxoHash
 
   hasSameCommitUTxOHash =
-    traceIfFalse "H54"
-      $ alphaUTxOHash
+    alphaUTxOHash
       == hashTxOuts (listTake numberOfCommitOutputs (listDrop numberOfFanoutOutputs outputs))
 
   hasSameDecommitUTxOHash =
-    traceIfFalse "H40"
-      $ omegaUTxOHash
+    omegaUTxOHash
       == hashTxOuts (listTake numberOfDecommitOutputs (listDrop numberOfFanoutOutputs outputs))
 
   afterContestationDeadline =
     case ivFrom validRange of
       LowerBound (Finite time) _ ->
-        traceIfFalse "H41"
-          $ time
+        time
           > contestationDeadline
-      _ -> traceError "H42"
+      _ -> error ()
 
 -- ============================================================================
 -- 13. Main validator
@@ -677,7 +640,7 @@ headValidator oldState input ownRef txInfo =
     (Closed closedDatum, Contest red) -> checkContest ownRef txInfo closedDatum red
     (Closed closedDatum, Fanout{fanoutNumberOfFanoutOutputs, fanoutNumberOfCommitOutputs, fanoutNumberOfDecommitOutputs}) ->
       headIsFinalizedWith txInfo closedDatum fanoutNumberOfFanoutOutputs fanoutNumberOfCommitOutputs fanoutNumberOfDecommitOutputs
-    _ -> traceError "H1"
+    _ -> error ()
 
 -- ============================================================================
 -- 14. Entry point and compiled script

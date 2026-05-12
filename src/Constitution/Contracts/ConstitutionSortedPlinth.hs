@@ -144,10 +144,7 @@ runRules config changedParams = go config (DMap.toBuiltinList changedParams)
                         then
                           validateParamValue paramValueData actualValueData
                             && go cfgRest restPairs
-                        else
-                          if actualPid > expectedPid
-                            then advance cfgRest
-                            else False
+                        else actualPid > expectedPid && advance cfgRest
                   )
                   cfg'
            in advance cfg
@@ -169,8 +166,8 @@ withChangedParams config ctx =
                   (getChangedParameters cp)
            in runRules config changedParams
         TreasuryWithdrawals _ _ -> True
-        _ -> traceError "C1"
-    _ -> traceError "C2"
+        _ -> error ()
+    _ -> error ()
 
 -- ============================================================================
 -- 7. Entry point and compiled script

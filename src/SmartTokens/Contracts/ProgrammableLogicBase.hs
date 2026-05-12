@@ -481,13 +481,13 @@ valueFromCred cred sigs withdrawalEntries inputs =
                                       pif
                                         (txSignedByPkh # pkh # sigs)
                                         (valueUnion # acc # stripAda (pfromData resolvedOutValue))
-                                        (ptraceInfoError "Missing required pk witness")
+                                        perror
                                     PScriptCredential scriptHash_ ->
                                       let scriptCredData = pdata $ pcon (PScriptCredential scriptHash_)
                                        in pif
                                             (isScriptInvokedEntries # scriptCredData # withdrawalEntries)
                                             (valueUnion # acc # stripAda (pfromData resolvedOutValue))
-                                            (ptraceInfoError "Missing required script witness")
+                                            perror
                                 _ -> perror
                             )
                             acc
@@ -617,7 +617,7 @@ findReferenceInputByCS currencySymbol referenceInputs =
         pmatch (ptxOutDatum resolvedOut) $ \case
           POutputDatum paramDat' ->
             pfromData $ punsafeCoerce @(PAsData PProgrammableLogicGlobalParams) (pto paramDat')
-          _ -> ptraceInfoError "protocol params datum missing"
+          _ -> perror
       go = pfix #$ plam $ \self remainingRefInputs ->
         let txIn = phead # remainingRefInputs
          in plet (ptxInInfoResolved $ pfromData txIn) $ \resolvedOut ->
@@ -662,8 +662,8 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wi
                   (nodeKey #< currCS)
                   ( let checks =
                           and'List
-                            [ ptraceInfoIfFalse "dir neg-proof node must cover" (currCS #< nodeNext)
-                            , ptraceInfoIfFalse "invalid dir node n" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
+                            [ currCS #< nodeNext
+                            , hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue
                             ]
                      in pif
                           checks
@@ -677,11 +677,10 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wi
                   )
                   ( let checks =
                           and'List
-                            [ ptraceInfoIfFalse "Missing required transfer script" $
-                                (directoryNodeDatumFTransferLogicScript #== cachedTransferScript)
-                                  #|| (isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
-                            , ptraceInfoIfFalse "directory proof mismatch" (nodeKey #== currCS)
-                            , ptraceInfoIfFalse "invalid dir node" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
+                            [ (directoryNodeDatumFTransferLogicScript #== cachedTransferScript)
+                                #|| (isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
+                            , nodeKey #== currCS
+                            , hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue
                             ]
                      in pif
                           checks
@@ -739,8 +738,8 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
                             (nodeKey #== currCS)
                             ( let checks =
                                     and'List
-                                      [ ptraceInfoIfFalse "Missing required transfer script" (isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries)
-                                      , ptraceInfoIfFalse "invalid dir node m" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
+                                      [ isScriptInvokedEntries # directoryNodeDatumFTransferLogicScript # withdrawalEntries
+                                      , hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue
                                       ]
                                in pif
                                     checks
@@ -749,9 +748,9 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
                             )
                             ( let checks =
                                     and'List
-                                      [ ptraceInfoIfFalse "dir mint neg-proof node must cover" (nodeKey #< currCS)
-                                      , ptraceInfoIfFalse "dir mint neg-proof node must cover" (currCS #< nodeNext)
-                                      , ptraceInfoIfFalse "invalid dir node n" (hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue)
+                                      [ nodeKey #< currCS
+                                      , currCS #< nodeNext
+                                      , hasCsFirstNonAda directoryNodeCS directoryNodeUTxOFValue
                                       ]
                                in pif
                                     checks
@@ -759,10 +758,10 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList withdr
                                     perror
                             )
                 )
-                (ptraceInfoError "mint proof missing")
+                perror
                 proofs
           )
-          (pelimList (\_ _ -> ptraceInfoError "extra mint proof") (pcon $ PValue $ pcon $ PMap programmableMintValue) proofs)
+          (pelimList (\_ _ -> perror) (pcon $ PValue $ pcon $ PMap programmableMintValue) proofs)
           remainingMintEntries
    in go # proofList # mintedEntries # pnil
 
@@ -851,10 +850,8 @@ checkCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCre
                           (inputCredentialData #== pforgetData (pdata progLogicCred))
                           ( pif
                               ( and'List
-                                  [ ptraceInfoIfFalse "corresponding output: address mismatch" $
-                                      inputTxOutAddress #== outputTxOutAddress
-                                  , ptraceInfoIfFalse "corresponding output: datum/reference script mismatch" $
-                                      programmableInputRest #== programmableOutputRest
+                                  [ inputTxOutAddress #== outputTxOutAddress
+                                  , programmableInputRest #== programmableOutputRest
                                   ]
                               )
                               ( let delta = valueEqualsDeltaCurrencySymbol programmableCS programmableInputValue programmableOutputValue
@@ -865,7 +862,7 @@ checkCorrespondingThirdPartyTransferInputsAndOutputs programmableCS progLogicCre
                           ( pif
                               ((pfstBuiltin # (pasConstr # inputCredentialData)) #== 1)
                               (self # remainingRelativeIdxs # remainingInputsAfterIdx # programmableOutputs # deltaAccumulator)
-                              (ptraceInfoError "input index points to pubkey input")
+                              perror
                           )
 
 -- | Validate the full SeizeAct mini-ledger transformation.
@@ -968,7 +965,7 @@ mkProgrammableLogicBase = plam $ \stakeCred ctx ->
                                          in (pfstBuiltin # withdrawalA) #== stakeCred #|| self # (ptail # withdrawals'')
                                     )
                        in go # (ptail # withdrawals)
-           in validateConditions [ptraceInfoIfFalse "programmable global not invoked" hasCred]
+           in validateConditions [hasCred]
 
 -- ============================================================================
 -- 17. Global validator (mkProgrammableLogicGlobal)
@@ -981,14 +978,10 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
   let red = pfromData $ punsafeCoerce @(PAsData PProgrammableLogicGlobalRedeemer) (pto pscriptContext'redeemer)
   referenceInputs <- plet $ pfromData ptxInfo'referenceInputs
 
-  ptraceInfo "Extracting protocol parameter UTxO"
-
   PProgrammableLogicGlobalParams{pdirectoryNodeCS, pprogLogicCred} <-
     pmatch $
       findReferenceInputByCS (pfromData protocolParamsCS) referenceInputs
   progLogicCred <- plet $ pfromData pprogLogicCred
-
-  ptraceInfo "Extracting invoked scripts"
   withdrawalEntries <- plet $ pto (pfromData ptxInfo'wdrl)
 
   pmatch red $ \case
@@ -1028,11 +1021,10 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
 
       validateConditions
         [ isRewardingScriptInfo (pdata pscriptContext'scriptInfo)
-        , ptraceInfoIfFalse "prog tokens escape" $
-            outputsContainExpectedValueAtCred
-              progLogicCred
-              (pfromData ptxInfo'outputs)
-              expectedProgrammableOutputValue
+        , outputsContainExpectedValueAtCred
+            progLogicCred
+            (pfromData ptxInfo'outputs)
+            expectedProgrammableOutputValue
         ]
     PSeizeAct{pdirectoryNodeIdx, pinputIdxs, poutputsStartIdx, plengthInputIdxs} -> P.do
       inputIdxsLen <- plet $ pfromData plengthInputIdxs
@@ -1049,10 +1041,10 @@ mkProgrammableLogicGlobal = plam $ \protocolParamsCS ctx -> P.do
       mintValueNoGuarantees <- plet $ punsafeCoerce @(PValue 'Sorted 'NoGuarantees) (pfromData ptxInfo'mint)
       seizeMintedTokens <- plet $ tokensForCurrencySymbol # pfromData directoryNodeDatumFKey # mintValueNoGuarantees
       let conditions =
-            [ ptraceInfoIfFalse "mini-ledger invariants violated" $ processThirdPartyTransfer directoryNodeDatumFKey progLogicCred (pfromData ptxInfo'inputs) remainingOutputs inputIdxsData seizeMintedTokens
-            , ptraceInfoIfFalse "issuer logic script must be invoked" $ isScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
-            , ptraceInfoIfFalse "directory node is not valid" $ hasCsFirstNonAda (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
-            , ptraceInfoIfFalse "spending redeemer count mismatch" $ enforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
-            , ptraceInfoIfFalse "input index length mismatch" $ (builtinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
+            [ processThirdPartyTransfer directoryNodeDatumFKey progLogicCred (pfromData ptxInfo'inputs) remainingOutputs inputIdxsData seizeMintedTokens
+            , isScriptInvokedEntries # directoryNodeDatumFIssuerLogicScript # withdrawalEntries
+            , hasCsFirstNonAda (pfromData pdirectoryNodeCS) seizeDirectoryNodeValue
+            , enforceNSpendRedeemers inputIdxsLen (pfromData ptxInfo'redeemers)
+            , (builtinListLengthFast # inputIdxsLen # inputIdxsData) #== inputIdxsLen
             ]
       validateConditions conditions

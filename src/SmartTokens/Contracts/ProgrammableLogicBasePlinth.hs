@@ -249,11 +249,11 @@ valueFromCred cred sigs wdrl inputs =
                   PubKeyCredential pkh ->
                     if pkhElem pkh sigs
                       then go (biCurrencyUnion acc (stripAdaBI (toBuiltinData val))) rest
-                      else traceError "Missing required pk witness"
+                      else error ()
                   ScriptCredential _ ->
                     if isScriptInvoked ownerCred wdrl
                       then go (biCurrencyUnion acc (stripAdaBI (toBuiltinData val))) rest
-                      else traceError "Missing required script witness"
+                      else error ()
               _ -> error ()
             else go acc rest
 
@@ -350,8 +350,8 @@ findReferenceInputByCS cs refInputs =
                 then
                   matchOutputDatum
                     dat
-                    (traceError "protocol params datum missing")
-                    (\_ -> traceError "protocol params datum missing")
+                    (error ())
+                    (\_ -> error ())
                     (\(Datum d) -> unsafeFromBuiltinData d)
                 else go rest
       )
@@ -363,8 +363,8 @@ decodeDirectoryNode txOutData =
   let TxOut{txOutDatum = dat} = unsafeFromBuiltinData txOutData
    in matchOutputDatum
         dat
-        (traceError "directory node datum missing")
-        (\_ -> traceError "directory node datum missing")
+        (error ())
+        (\_ -> error ())
         (\(Datum d) -> unsafeFromBuiltinData d)
 
 {-# INLINEABLE checkTransferLogicAndGetProgrammableValue #-}
@@ -384,7 +384,7 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wd
   go proofs csPairs acc cachedTransferScript =
     Builtins.matchList' csPairs acc $ \currPair csPairsRest ->
       DList.caseList
-        (\_ -> traceError "transfer proof missing")
+        (\_ -> error ())
         ( \proofIdx proofsRest ->
             let currCS = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
                 TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
@@ -398,7 +398,7 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wd
                   then
                     if currCS < nodeNext && hasCsFirstNonAda directoryNodeCS dirNodeValue
                       then go proofsRest csPairsRest acc cachedTransferScript
-                      else traceError "dir neg-proof node must cover"
+                      else error ()
                   else
                     let transferScriptOk =
                           dirNodeTransferLogic
@@ -408,13 +408,7 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wd
                         validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
                      in if transferScriptOk && keyMatch && validDirNode
                           then go proofsRest csPairsRest (BI.mkCons currPair acc) dirNodeTransferLogic
-                          else
-                            if not transferScriptOk
-                              then traceError "Missing required transfer script"
-                              else
-                                if not keyMatch
-                                  then traceError "directory proof mismatch"
-                                  else traceError "invalid dir node"
+                          else error ()
         )
         proofs
 
@@ -437,12 +431,12 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl t
       ( const
           ( if DList.null proofs
               then progMintValue
-              else traceError "extra mint proof"
+              else error ()
           )
       )
       ( \currPair mintRest ->
           DList.caseList
-            (\_ -> traceError "mint proof missing")
+            (\_ -> error ())
             ( \proofIdx proofsRest ->
                 let mintCs = unsafeFromBuiltinData (BI.fst currPair) :: CurrencySymbol
                     TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputs proofIdx)
@@ -458,17 +452,14 @@ checkMintLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl t
                             validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
                          in if transferScriptOk && validDirNode
                               then go proofsRest mintRest (BI.mkCons currPair progMintValue)
-                              else
-                                if not transferScriptOk
-                                  then traceError "Missing required transfer script"
-                                  else traceError "invalid dir node m"
+                              else error ()
                       else
                         let coverLower = nodeKey < mintCs
                             coverUpper = mintCs < nodeNext
                             validDirNode = hasCsFirstNonAda directoryNodeCS dirNodeValue
                          in if coverLower && coverUpper && validDirNode
                               then go proofsRest mintRest progMintValue
-                              else traceError "dir mint neg-proof node must cover"
+                              else error ()
             )
             proofs
       )
@@ -555,15 +546,12 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
                         then
                           let delta = valueEqualsDeltaCurrencySymbol programmableCS inputVal outputVal
                            in go remainingIdxs remainingInputsAfterIdx outputsRest (biTokenUnion delta deltaAccumulator)
-                        else
-                          if inputAddr /= outputAddr
-                            then traceError "corresponding output: address mismatch"
-                            else traceError "corresponding output: datum/reference script mismatch"
+                        else error ()
               )
               programmableOutputs
           else case inputCred of
             ScriptCredential _ -> go remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator
-            _ -> traceError "input index points to pubkey input"
+            _ -> error ()
 
   accumulateProgOutputTokens :: BIList -> BIPairs
   accumulateProgOutputTokens xs =
@@ -603,7 +591,7 @@ mkProgrammableLogicBaseValidator stakeCredData ctxData =
       TxInfo{txInfoWdrl = wdrl} = txInfo_
    in if DMap.member stakeCred wdrl
         then ()
-        else traceError "programmable global not invoked"
+        else error ()
 
 {-# INLINEABLE mkProgrammableLogicGlobalValidator #-}
 mkProgrammableLogicGlobalValidator :: BuiltinData -> BuiltinData -> ()
@@ -667,7 +655,7 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
                   outputs
                   expectedProgrammableOutputValue
                 then ()
-                else traceError "prog tokens escape"
+                else error ()
         SeizeAct{plgrDirectoryNodeIdx, plgrInputIdxs, plgrOutputsStartIdx, plgrLengthInputIdxs} ->
           let remainingOutputs = biDrop plgrOutputsStartIdx (dlistToBI outputs)
               TxInInfo _ dirNodeTxOut = unsafeFromBuiltinData (biIndex refInputsBIList plgrDirectoryNodeIdx)
@@ -693,16 +681,7 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
               inputIdxLenOk = DList.length plgrInputIdxs == plgrLengthInputIdxs
            in if miniLedgerOk && issuerLogicOk && validDirNode && spendRedeemersOk && inputIdxLenOk
                 then ()
-                else
-                  if not issuerLogicOk
-                    then traceError "issuer logic script must be invoked"
-                    else
-                      if not validDirNode
-                        then traceError "directory node is not valid"
-                        else
-                          if not spendRedeemersOk
-                            then traceError "spending redeemer count mismatch"
-                            else traceError "input index length mismatch"
+                else error ()
 
 plinthProgrammableLogicBaseScript :: Script
 plinthProgrammableLogicBaseScript =

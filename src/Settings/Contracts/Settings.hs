@@ -132,10 +132,10 @@ pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
                     pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
                       pif (ptxInInfo'outRef #== ref) (pfromData inp) (self # rest)
                 )
-                (ptraceInfoError "own input not found")
+                perror
                 inputs
          in go # txInputs
-      _ -> ptraceInfoError "not spending"
+      _ -> perror
 
 pgetOutputDatum :: Term s (PTxOut :--> PSettingsDatum)
 pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
@@ -143,7 +143,7 @@ pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
     pmatch ptxOut'datum $ \case
       POutputDatum d ->
         pfromData $ punsafeCoerce @(PAsData PSettingsDatum) (pto d)
-      _ -> ptraceInfoError "no inline datum"
+      _ -> perror
 
 pvalueWithoutLovelace :: Term s (PValue 'Sorted 'Positive :--> PValue 'Sorted 'Positive)
 pvalueWithoutLovelace = phoistAcyclic $ plam $ \v ->
@@ -163,7 +163,7 @@ plistHeadOutput :: Term s (PBuiltinList (PAsData PTxOut) :--> PTxOut)
 plistHeadOutput = phoistAcyclic $ plam $ \outputs ->
   pelimList
     (\x _ -> pfromData x)
-    (ptraceInfoError "no outputs")
+    perror
     outputs
 
 pvalueIsZero :: Term s (PValue 'Sorted 'NonZero :--> PBool)
