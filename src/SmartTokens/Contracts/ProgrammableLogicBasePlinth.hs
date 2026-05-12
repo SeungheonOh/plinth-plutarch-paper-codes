@@ -4,30 +4,29 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Strict #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
 
 module SmartTokens.Contracts.ProgrammableLogicBasePlinth (
   plinthProgrammableLogicBaseScript,
   plinthProgrammableLogicGlobalScript,
 ) where
 
+import Plinth.Plugin
+import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
 import PlutusLedgerApi.V1.Data.Value
 import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI
+import PlutusTx.Code (getPlcNoAnn)
 import PlutusTx.Data.AssocMap qualified as DMap
 import PlutusTx.Data.List qualified as DList
 import PlutusTx.Prelude
-
-import Plutarch.Script (Script (..))
-import PlutusTx.Code (getPlcNoAnn)
 import UntypedPlutusCore qualified as UPLC
 
 import SmartTokens.Types.PTokenDirectory (
@@ -103,15 +102,6 @@ biReversePairs = go nilPairs
 {-# INLINEABLE pkhElem #-}
 pkhElem :: PubKeyHash -> DList.List PubKeyHash -> Bool
 pkhElem = DList.elem
-
-{-# INLINEABLE stripAda #-}
-stripAda :: Value -> Value
-stripAda (Value m) =
-  let bl = DMap.toBuiltinList m
-   in Builtins.matchList'
-        bl
-        (Value DMap.empty)
-        (\_ rest -> Value (DMap.unsafeFromBuiltinList rest))
 
 {-# INLINEABLE stripAdaBI #-}
 stripAdaBI :: BI.BuiltinData -> BIPairs
@@ -716,8 +706,8 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
 
 plinthProgrammableLogicBaseScript :: Script
 plinthProgrammableLogicBaseScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkProgrammableLogicBaseValidator||])
+  compiledCodeToScript $ plinthc mkProgrammableLogicBaseValidator
 
 plinthProgrammableLogicGlobalScript :: Script
 plinthProgrammableLogicGlobalScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkProgrammableLogicGlobalValidator||])
+  compiledCodeToScript $ plinthc mkProgrammableLogicGlobalValidator

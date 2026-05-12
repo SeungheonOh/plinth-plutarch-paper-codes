@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fno-specialize #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:target-version=1.1.0 #-}
 
 module Crowdfund.Contracts.CrowdfundPlinth (
   plinthCrowdfundScript,
@@ -17,6 +16,7 @@ import PlutusLedgerApi.Data.V3
 import PlutusLedgerApi.V1.Data.Interval (matchExtended, matchInterval, matchLowerBound)
 import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 
+import Plinth.Plugin
 import PlutusTx qualified
 import PlutusTx.Builtins.Internal qualified as BI
 import PlutusTx.Code (getPlcNoAnn)
@@ -281,4 +281,4 @@ mkCrowdfundValidator ctxData =
 
 plinthCrowdfundScript :: Script
 plinthCrowdfundScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkCrowdfundValidator||])
+  compiledCodeToScript $ plinthc mkCrowdfundValidator

@@ -1,18 +1,18 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fno-specialize #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:conservative-optimisation #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:optimize #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:conservative-optimisation #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:optimize #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:target-version=1.1.0 #-}
 
 module Hydra.Contracts.HeadPlinth (
   plinthHeadScript,
 ) where
 
+import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.V1.Value (geq, isZero)
 import PlutusLedgerApi.V3
@@ -697,4 +697,4 @@ mkHeadValidator ctxData =
 
 plinthHeadScript :: Script
 plinthHeadScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkHeadValidator||])
+  compiledCodeToScript $ plinthc mkHeadValidator

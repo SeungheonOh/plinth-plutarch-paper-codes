@@ -1,17 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE Strict #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
 
 module Constitution.Contracts.ConstitutionSortedPlinth (
   plinthConstitutionScript,
 ) where
 
+import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3 (
   ScriptContext,
@@ -185,4 +185,4 @@ mkConstitutionValidator configData ctxData =
 
 plinthConstitutionScript :: Script
 plinthConstitutionScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkConstitutionValidator||])
+  compiledCodeToScript $ plinthc mkConstitutionValidator

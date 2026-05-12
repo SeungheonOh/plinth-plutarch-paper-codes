@@ -1,18 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Strict #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
+{-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
 
 module Voting.Contracts.VotingPlinth (
   plinthVotingScript,
 ) where
 
+import Plinth.Plugin
 import Plutarch.Script (Script (..))
 import PlutusLedgerApi.Data.V3
-
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import PlutusTx.Builtins.Internal qualified as BI
@@ -111,4 +110,4 @@ mkVotingValidator csData tnData ctxData =
 
 plinthVotingScript :: Script
 plinthVotingScript =
-  compiledCodeToScript $$(PlutusTx.compile [||mkVotingValidator||])
+  compiledCodeToScript $ plinthc mkVotingValidator
