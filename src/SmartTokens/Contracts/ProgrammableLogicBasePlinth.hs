@@ -3,11 +3,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
 
 module SmartTokens.Contracts.ProgrammableLogicBasePlinth (
   plinthProgrammableLogicBaseScript,
@@ -15,6 +17,7 @@ module SmartTokens.Contracts.ProgrammableLogicBasePlinth (
 ) where
 
 import PlutusLedgerApi.Data.V3
+import PlutusLedgerApi.V1.Data.Value
 import PlutusLedgerApi.V2.Data.Tx (matchOutputDatum)
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
@@ -81,27 +84,21 @@ dlistToBI = DList.toBuiltinList
 biDrop :: Integer -> BIList -> BIList
 biDrop n xs
   | n <= 0 = xs
-  | otherwise = Builtins.matchList xs (const xs) (\_ ys -> biDrop (n - 1) ys)
+  | otherwise = Builtins.matchList' xs xs (\_ ys -> biDrop (n - 1) ys)
 
 {-# INLINEABLE biIndex #-}
 biIndex :: BIList -> Integer -> BI.BuiltinData
 biIndex xs n =
-  Builtins.matchList
-    xs
-    (const (traceError "index out of bounds"))
+  BI.unsafeCaseList
     (\h t -> if n <= 0 then h else biIndex t (n - 1))
-
-{-# INLINEABLE biLength #-}
-biLength :: BIList -> Integer
-biLength xs =
-  Builtins.matchList xs (const 0) (\_ t -> 1 + biLength t)
+    xs
 
 {-# INLINEABLE biReversePairs #-}
 biReversePairs :: BIPairs -> BIPairs
 biReversePairs = go nilPairs
  where
   go acc xs =
-    Builtins.matchList xs (const acc) (\h t -> go (BI.mkCons h acc) t)
+    Builtins.matchList' xs acc (\h t -> go (BI.mkCons h acc) t)
 
 {-# INLINEABLE pkhElem #-}
 pkhElem :: PubKeyHash -> DList.List PubKeyHash -> Bool
@@ -111,22 +108,22 @@ pkhElem = DList.elem
 stripAda :: Value -> Value
 stripAda (Value m) =
   let bl = DMap.toBuiltinList m
-   in Builtins.matchList
+   in Builtins.matchList'
         bl
-        (const (Value DMap.empty))
+        (Value DMap.empty)
         (\_ rest -> Value (DMap.unsafeFromBuiltinList rest))
 
 {-# INLINEABLE stripAdaBI #-}
 stripAdaBI :: BI.BuiltinData -> BIPairs
 stripAdaBI valData =
   let bl = BI.unsafeDataAsMap valData
-   in Builtins.matchList bl (const nilPairs) (\_ rest -> rest)
+   in Builtins.matchList' bl nilPairs (\_ rest -> rest)
 
 {-# INLINEABLE biTokenUnion #-}
 biTokenUnion :: BIPairs -> BIPairs -> BIPairs
 biTokenUnion xs ys =
-  Builtins.matchList xs (const ys) $ \xh xr ->
-    Builtins.matchList ys (const xs) $ \yh yr ->
+  Builtins.matchList' xs ys $ \xh xr ->
+    Builtins.matchList' ys xs $ \yh yr ->
       let xk = BI.fst xh
           yk = BI.fst yh
           xb = BI.unsafeDataAsB xk
@@ -141,8 +138,8 @@ biTokenUnion xs ys =
 {-# INLINEABLE biCurrencyUnion #-}
 biCurrencyUnion :: BIPairs -> BIPairs -> BIPairs
 biCurrencyUnion xs ys =
-  Builtins.matchList xs (const ys) $ \xh xr ->
-    Builtins.matchList ys (const xs) $ \yh yr ->
+  Builtins.matchList' xs ys $ \xh xr ->
+    Builtins.matchList' ys xs $ \yh yr ->
       let xk = BI.fst xh
           yk = BI.fst yh
           xb = BI.unsafeDataAsB xk
@@ -158,27 +155,10 @@ biCurrencyUnion xs ys =
 valueUnion :: Value -> Value -> Value
 valueUnion a b = Value (DMap.unsafeFromBuiltinList (biCurrencyUnion (DMap.toBuiltinList (getValue a)) (DMap.toBuiltinList (getValue b))))
 
-{-# INLINEABLE assetQtyInValue #-}
-assetQtyInValue :: Value -> CurrencySymbol -> TokenName -> Integer
-assetQtyInValue (Value m) cs tn =
-  case DMap.lookup cs m of
-    Nothing -> 0
-    Just tns ->
-      case DMap.lookup tn tns of
-        Nothing -> 0
-        Just qty -> qty
-
-{-# INLINEABLE tokensForCurrencySymbol #-}
-tokensForCurrencySymbol :: CurrencySymbol -> Value -> BIPairs
-tokensForCurrencySymbol targetCs (Value m) =
-  case DMap.lookup targetCs m of
-    Nothing -> nilPairs
-    Just tns -> DMap.toBuiltinList tns
-
 {-# INLINEABLE biNegateTokens #-}
 biNegateTokens :: BIPairs -> BIPairs
 biNegateTokens xs =
-  Builtins.matchList xs (const nilPairs) $ \h t ->
+  Builtins.matchList' xs nilPairs $ \h t ->
     consPair (BI.fst h) (BI.mkI (negate (BI.unsafeDataAsI (BI.snd h)))) (biNegateTokens t)
 
 {-# INLINEABLE biSubtractTokens #-}
@@ -188,9 +168,9 @@ biSubtractTokens ins outs =
     ins
     (const (biNegateTokens outs))
     ( \inH inR ->
-        Builtins.matchList
+        Builtins.matchList'
           outs
-          (const ins)
+          ins
           ( \outH outR ->
               let inK = BI.fst inH
                   outK = BI.fst outH
@@ -212,9 +192,9 @@ biSubtractTokens ins outs =
 {-# INLINEABLE biTokenPairsContain #-}
 biTokenPairsContain :: BIPairs -> BIPairs -> Bool
 biTokenPairsContain act req =
-  Builtins.matchList
+  Builtins.matchList'
     req
-    (const True)
+    True
     ( \reqH reqR ->
         let reqQty = BI.unsafeDataAsI (BI.snd reqH)
          in Builtins.matchList
@@ -247,13 +227,13 @@ isSpendingPurpose sp = BI.fst (BI.unsafeDataAsConstr (toBuiltinData sp)) `Builti
 hasCsFirstNonAda :: CurrencySymbol -> Value -> Bool
 hasCsFirstNonAda cs (Value m) =
   let bl = DMap.toBuiltinList m
-   in Builtins.matchList
+   in Builtins.matchList'
         bl
-        (const False)
+        False
         ( \_ rest ->
-            Builtins.matchList
+            Builtins.matchList'
               rest
-              (const False)
+              False
               (\second _ -> unsafeFromBuiltinData (BI.fst second) == cs)
         )
 
@@ -268,7 +248,7 @@ valueFromCred cred sigs wdrl inputs =
   Value (DMap.unsafeFromBuiltinList (go nilPairs (dlistToBI inputs)))
  where
   go acc xs =
-    Builtins.matchList xs (const acc) $ \inp rest ->
+    Builtins.matchList' xs acc $ \inp rest ->
       let TxInInfo _ txOut = unsafeFromBuiltinData inp
           TxOut{txOutAddress = addr, txOutValue = val} = txOut
           Address paymentCred mStake = addr
@@ -293,7 +273,7 @@ valueToCred cred outputs =
   Value (DMap.unsafeFromBuiltinList (go nilPairs (dlistToBI outputs)))
  where
   go acc xs =
-    Builtins.matchList xs (const acc) $ \txOutData rest ->
+    Builtins.matchList' xs acc $ \txOutData rest ->
       let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
           Address paymentCred _ = addr
        in if paymentCred == cred
@@ -304,18 +284,18 @@ valueToCred cred outputs =
 outputsContainExpectedValueAtCred :: Credential -> DList.List TxOut -> Value -> Bool
 outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
   let expectedCsPairs = DMap.toBuiltinList (getValue expectedValue)
-   in Builtins.matchList
+   in Builtins.matchList'
         expectedCsPairs
-        (const True)
+        True
         ( \firstCsPair restCsPairs ->
             Builtins.matchList
               restCsPairs
               ( const
                   ( let expCs = unsafeFromBuiltinData (BI.fst firstCsPair) :: CurrencySymbol
                         expTnPairs = BI.unsafeDataAsMap (BI.snd firstCsPair)
-                     in Builtins.matchList
+                     in Builtins.matchList'
                           expTnPairs
-                          (const True)
+                          True
                           ( \firstTnPair restTnPairs ->
                               Builtins.matchList
                                 restTnPairs
@@ -345,7 +325,7 @@ outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
               let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
                   Address paymentCred _ = addr
                in if paymentCred == progLogicCred
-                    then hasAtLeastAssetInProgOutputs reqQty (curQty + assetQtyInValue val cs tn) cs tn rest
+                    then hasAtLeastAssetInProgOutputs reqQty (curQty + valueOf val cs tn) cs tn rest
                     else hasAtLeastAssetInProgOutputs reqQty curQty cs tn rest
           )
 
@@ -354,17 +334,17 @@ outputsContainExpectedValueAtCred progLogicCred txOutputs expectedValue =
      in checkAllExpectedCsPairs actualValue expCsPairs
 
   checkAllExpectedCsPairs actual xs =
-    Builtins.matchList xs (const True) $ \csPair rest ->
+    Builtins.matchList' xs True $ \csPair rest ->
       let cs = unsafeFromBuiltinData (BI.fst csPair) :: CurrencySymbol
           tnPairs = BI.unsafeDataAsMap (BI.snd csPair)
        in checkAllExpectedTnPairs actual cs tnPairs && checkAllExpectedCsPairs actual rest
 
   checkAllExpectedTnPairs :: Value -> CurrencySymbol -> BIPairs -> Bool
   checkAllExpectedTnPairs actual cs tnPairs =
-    Builtins.matchList tnPairs (const True) $ \tnPair rest ->
+    Builtins.matchList' tnPairs True $ \tnPair rest ->
       let tn = unsafeFromBuiltinData (BI.fst tnPair) :: TokenName
           qty = BI.unsafeDataAsI (BI.snd tnPair)
-       in assetQtyInValue actual cs tn >= qty && checkAllExpectedTnPairs actual cs rest
+       in valueOf actual cs tn >= qty && checkAllExpectedTnPairs actual cs rest
 
 {-# INLINEABLE findReferenceInputByCS #-}
 findReferenceInputByCS :: CurrencySymbol -> DList.List TxInInfo -> ProgrammableLogicGlobalParamsD
@@ -372,9 +352,7 @@ findReferenceInputByCS cs refInputs =
   go (dlistToBI refInputs)
  where
   go xs =
-    Builtins.matchList
-      xs
-      (const (traceError "protocol params not found"))
+    BI.unsafeCaseList
       ( \inp rest ->
           let TxInInfo _ txOut = unsafeFromBuiltinData inp
               TxOut{txOutValue = val, txOutDatum = dat} = txOut
@@ -387,6 +365,7 @@ findReferenceInputByCS cs refInputs =
                     (\(Datum d) -> unsafeFromBuiltinData d)
                 else go rest
       )
+      xs
 
 {-# INLINEABLE decodeDirectoryNode #-}
 decodeDirectoryNode :: BI.BuiltinData -> DirectorySetNodeD
@@ -413,7 +392,7 @@ checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wd
  where
   go :: DList.List Integer -> BIPairs -> BIPairs -> Credential -> BIPairs
   go proofs csPairs acc cachedTransferScript =
-    Builtins.matchList csPairs (const acc) $ \currPair csPairsRest ->
+    Builtins.matchList' csPairs acc $ \currPair csPairsRest ->
       DList.caseList
         (\_ -> traceError "transfer proof missing")
         ( \proofIdx proofsRest ->
@@ -513,8 +492,8 @@ valueEqualsDeltaCurrencySymbol progCS inputValue outputValue =
  where
   goOuter :: BIPairs -> BIPairs -> BIPairs
   goOuter inPairs outPairs =
-    Builtins.matchList inPairs (const nilPairs) $ \inH inR ->
-      Builtins.matchList outPairs (const nilPairs) $ \outH outR ->
+    Builtins.matchList' inPairs nilPairs $ \inH inR ->
+      Builtins.matchList' outPairs nilPairs $ \outH outR ->
         let inCS = unsafeFromBuiltinData (BI.fst inH) :: CurrencySymbol
             outCS = unsafeFromBuiltinData (BI.fst outH) :: CurrencySymbol
          in if inCS == outCS
@@ -564,13 +543,12 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
       )
       ( \relIdx restIdxs ->
           let dropped = biDrop relIdx remainingInputs
-           in Builtins.matchList
-                dropped
-                (const (traceError "input index out of bounds"))
+           in BI.unsafeCaseList
                 ( \programmableInputData afterIdx ->
                     let TxInInfo _ inputTxOut = unsafeFromBuiltinData programmableInputData
                      in checkCorrespondingPair inputTxOut restIdxs afterIdx programmableOutputs deltaAccumulator
                 )
+                dropped
       )
       idxs
 
@@ -580,9 +558,7 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
         Address inputCred _ = inputAddr
      in if toBuiltinData inputCred == progLogicCredData
           then
-            Builtins.matchList
-              programmableOutputs
-              (const (traceError "no corresponding output"))
+            BI.unsafeCaseList
               ( \outputTxOutData outputsRest ->
                   let TxOut{txOutAddress = outputAddr, txOutValue = outputVal, txOutDatum = outputDat, txOutReferenceScript = outputRefScript} = unsafeFromBuiltinData outputTxOutData
                    in if inputAddr == outputAddr && inputDat == outputDat && inputRefScript == outputRefScript
@@ -594,38 +570,39 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
                             then traceError "corresponding output: address mismatch"
                             else traceError "corresponding output: datum/reference script mismatch"
               )
+              programmableOutputs
           else case inputCred of
             ScriptCredential _ -> go remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator
             _ -> traceError "input index points to pubkey input"
 
   accumulateProgOutputTokens :: BIList -> BIPairs
   accumulateProgOutputTokens xs =
-    Builtins.matchList xs (const nilPairs) $ \txOutData rest ->
+    Builtins.matchList' xs nilPairs $ \txOutData rest ->
       let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
           Address paymentCred _ = addr
        in if toBuiltinData paymentCred == progLogicCredData
-            then biTokenUnion (tokensForCurrencySymbol programmableCS val) (accumulateProgOutputTokens rest)
+            then biTokenUnion (withCurrencySymbol programmableCS val nilPairs DMap.toBuiltinList) (accumulateProgOutputTokens rest)
             else accumulateProgOutputTokens rest
 
 {-# INLINEABLE enforceNSpendRedeemers #-}
 enforceNSpendRedeemers :: Integer -> DMap.Map ScriptPurpose Redeemer -> Bool
 enforceNSpendRedeemers n rdmrs =
   let bl = dropBuiltinList (n - 1) (DMap.toBuiltinList rdmrs)
-   in Builtins.matchList
+   in Builtins.matchList'
         bl
-        (const False)
+        False
         ( \pair rest ->
             isSpendingPurpose (unsafeFromBuiltinData (BI.fst pair))
-              && Builtins.matchList
+              && Builtins.matchList'
                 rest
-                (const True)
+                True
                 (\nextPair _ -> not (isSpendingPurpose (unsafeFromBuiltinData (BI.fst nextPair))))
         )
  where
   dropBuiltinList :: Integer -> BIPairs -> BIPairs
   dropBuiltinList m xs
     | m <= 0 = xs
-    | otherwise = Builtins.matchList xs (const xs) (\_ ys -> dropBuiltinList (m - 1) ys)
+    | otherwise = Builtins.matchList' xs xs (\_ ys -> dropBuiltinList (m - 1) ys)
 
 {-# INLINEABLE mkProgrammableLogicBaseValidator #-}
 mkProgrammableLogicBaseValidator :: BuiltinData -> BuiltinData -> ()
@@ -668,10 +645,9 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
    in case red of
         TransferAct{plgrTransferProofs, plgrMintProofs} ->
           let cachedTransferScript0 =
-                Builtins.matchList
-                  (DMap.toBuiltinList wdrl)
-                  (const (traceError "no withdrawals"))
+                BI.unsafeCaseList
                   (\first _ -> unsafeFromBuiltinData (BI.fst first))
+                  (DMap.toBuiltinList wdrl)
 
               totalProgTokenValue_ =
                 checkTransferLogicAndGetProgrammableValue
@@ -711,7 +687,7 @@ mkProgrammableLogicGlobalValidator protocolParamsCsData ctxData =
                 , issuerLogicScriptD = dirNodeIssuerLogic
                 } = decodeDirectoryNode (toBuiltinData dirNodeTxOut)
 
-              seizeMintedTokens = tokensForCurrencySymbol programmableCS mintValueAsValue
+              seizeMintedTokens = withCurrencySymbol programmableCS mintValueAsValue nilPairs DMap.toBuiltinList
 
               miniLedgerOk =
                 processThirdPartyTransfer

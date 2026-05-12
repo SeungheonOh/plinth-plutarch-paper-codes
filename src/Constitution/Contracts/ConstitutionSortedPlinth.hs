@@ -1,14 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
-{-# OPTIONS_GHC -fno-specialize #-}
 {-# OPTIONS_GHC -fplugin PlutusTx.Plugin #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:conservative-optimisation #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:optimize #-}
-{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:no-preserve-logging #-}
 
 module Constitution.Contracts.ConstitutionSortedPlinth (
   plinthConstitutionScript,
@@ -60,18 +58,12 @@ compiledCodeToScript code =
 -- 2. Predicate validation (integers)
 -- ============================================================================
 
-{-# INLINEABLE applyIntPred #-}
-applyIntPred :: PredKeyD -> Integer -> Integer -> Bool
-applyIntPred pk expected actual =
-  case pk of
-    MinValueD -> expected <= actual
-    MaxValueD -> expected >= actual
-    NotEqualD -> expected /= actual
-
 {-# INLINEABLE intPredAllExpected #-}
 intPredAllExpected :: PredKeyD -> Integer -> List Integer -> Bool
-intPredAllExpected pk actual =
-  DList.all (\expected -> applyIntPred pk expected actual)
+intPredAllExpected pk actual = case pk of
+  MinValueD -> DList.all (<= actual)
+  MaxValueD -> DList.all (>= actual)
+  NotEqualD -> DList.all (/= actual)
 
 {-# INLINEABLE validateIntPreds #-}
 validateIntPreds :: List (PredKeyD, List Integer) -> Integer -> Bool
@@ -82,18 +74,12 @@ validateIntPreds preds actual =
 -- 3. Predicate validation (rationals)
 -- ============================================================================
 
-{-# INLINEABLE applyRatPred #-}
-applyRatPred :: PredKeyD -> Integer -> Integer -> Bool
-applyRatPred pk lhs rhs =
-  case pk of
-    MinValueD -> lhs <= rhs
-    MaxValueD -> lhs >= rhs
-    NotEqualD -> lhs /= rhs
-
 {-# INLINEABLE ratPredAllExpected #-}
 ratPredAllExpected :: PredKeyD -> Integer -> Integer -> List (Integer, Integer) -> Bool
-ratPredAllExpected pk actualNum actualDen =
-  DList.all (\(en, ed) -> applyRatPred pk (en * actualDen) (actualNum * ed))
+ratPredAllExpected pk actualNum actualDen = case pk of
+  MinValueD -> DList.all (\(en, ed) -> en * actualDen <= actualNum * ed)
+  MaxValueD -> DList.all (\(en, ed) -> en * actualDen >= actualNum * ed)
+  NotEqualD -> DList.all (\(en, ed) -> en * actualDen /= actualNum * ed)
 
 {-# INLINEABLE validateRatPreds #-}
 validateRatPreds :: List (PredKeyD, List (Integer, Integer)) -> Integer -> Integer -> Bool
@@ -144,25 +130,27 @@ runRules :: List (Integer, BuiltinData) -> Map Integer BuiltinData -> Bool
 runRules config changedParams = go config (DMap.toBuiltinList changedParams)
  where
   go cfg cparams =
-    Builtins.matchList
+    Builtins.matchList'
       cparams
-      (\_ -> True)
+      True
       ( \firstPair restPairs ->
-          DList.caseList'
-            False
-            ( \(expectedPid, paramValueData) cfgRest ->
-                let actualPid = Builtins.unsafeDataAsI (BI.fst firstPair)
-                    actualValueData = BI.snd firstPair
-                 in if actualPid == expectedPid
-                      then
-                        validateParamValue paramValueData actualValueData
-                          && go cfgRest restPairs
-                      else
-                        if actualPid > expectedPid
-                          then go cfgRest cparams
-                          else False
-            )
-            cfg
+          let actualPid = Builtins.unsafeDataAsI (BI.fst firstPair)
+              actualValueData = BI.snd firstPair
+              advance cfg' =
+                DList.caseList'
+                  False
+                  ( \(expectedPid, paramValueData) cfgRest ->
+                      if actualPid == expectedPid
+                        then
+                          validateParamValue paramValueData actualValueData
+                            && go cfgRest restPairs
+                        else
+                          if actualPid > expectedPid
+                            then advance cfgRest
+                            else False
+                  )
+                  cfg'
+           in advance cfg
       )
 
 -- ============================================================================

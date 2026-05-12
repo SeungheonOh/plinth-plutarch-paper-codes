@@ -39,28 +39,24 @@ pcheck b = pif b (pconstant ()) perror
 -- `PData` by hand.
 -- ============================================================================
 
-papplyIntPred :: Term s (PPredKey :--> PInteger :--> PInteger :--> PBool)
-papplyIntPred = phoistAcyclic $ plam $ \pk expected actual ->
-  pmatch pk $ \case
-    PMinValue -> expected #<= actual
-    PMaxValue -> expected #>= actual
-    PNotEqual -> pnot # (expected #== actual)
-
 pintPredAllExpected
   :: Term
-      s
-      ( PPredKey
-          :--> PInteger
-          :--> PBuiltinList (PAsData PInteger)
-          :--> PBool
-      )
+       s
+       ( PPredKey
+           :--> PInteger
+           :--> PBuiltinList (PAsData PInteger)
+           :--> PBool
+       )
 pintPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actual expecteds ->
   pelimList
     ( \expected rest ->
-        papplyIntPred
-          # pk
-          # pfromData expected
-          # actual
+        pmatch
+          pk
+          ( \case
+              PMinValue -> pfromData expected #<= actual
+              PMaxValue -> pfromData expected #>= actual
+              PNotEqual -> pnot # (pfromData expected #== actual)
+          )
           #&& self
           # pk
           # actual
@@ -71,11 +67,11 @@ pintPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actual expecteds -
 
 pvalidateIntPreds
   :: Term
-      s
-      ( PBuiltinList (PAsData PIntPredEntry)
-          :--> PInteger
-          :--> PBool
-      )
+       s
+       ( PBuiltinList (PAsData PIntPredEntry)
+           :--> PInteger
+           :--> PBool
+       )
 pvalidateIntPreds = phoistAcyclic $ pfix #$ plam $ \self preds actual ->
   pelimList
     ( \entry rest ->
@@ -95,30 +91,26 @@ pvalidateIntPreds = phoistAcyclic $ pfix #$ plam $ \self preds actual ->
 -- 3. Predicate validation (rationals)
 -- ============================================================================
 
-papplyRatPred :: Term s (PPredKey :--> PInteger :--> PInteger :--> PBool)
-papplyRatPred = phoistAcyclic $ plam $ \pk lhs rhs ->
-  pmatch pk $ \case
-    PMinValue -> lhs #<= rhs
-    PMaxValue -> lhs #>= rhs
-    PNotEqual -> pnot # (lhs #== rhs)
-
 pratPredAllExpected
   :: Term
-      s
-      ( PPredKey
-          :--> PInteger
-          :--> PInteger
-          :--> PBuiltinList (PAsData PRatPair)
-          :--> PBool
-      )
+       s
+       ( PPredKey
+           :--> PInteger
+           :--> PInteger
+           :--> PBuiltinList (PAsData PRatPair)
+           :--> PBool
+       )
 pratPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actualNum actualDen expecteds ->
   pelimList
     ( \pairD rest ->
         pmatch (pfromData pairD) $ \(PRatPair{prpNum, prpDen}) ->
-          papplyRatPred
-            # pk
-            # (pfromData prpNum * actualDen)
-            # (actualNum * pfromData prpDen)
+          pmatch
+            pk
+            ( \case
+                PMinValue -> (pfromData prpNum * actualDen) #<= (actualNum * pfromData prpDen)
+                PMaxValue -> (pfromData prpNum * actualDen) #>= (actualNum * pfromData prpDen)
+                PNotEqual -> pnot # ((pfromData prpNum * actualDen) #== (actualNum * pfromData prpDen))
+            )
             #&& self
             # pk
             # actualNum
@@ -130,12 +122,12 @@ pratPredAllExpected = phoistAcyclic $ pfix #$ plam $ \self pk actualNum actualDe
 
 pvalidateRatPreds
   :: Term
-      s
-      ( PBuiltinList (PAsData PRatPredEntry)
-          :--> PInteger
-          :--> PInteger
-          :--> PBool
-      )
+       s
+       ( PBuiltinList (PAsData PRatPredEntry)
+           :--> PInteger
+           :--> PInteger
+           :--> PBool
+       )
 pvalidateRatPreds = phoistAcyclic $ pfix #$ plam $ \self preds actualNum actualDen ->
   pelimList
     ( \entry rest ->
@@ -204,11 +196,11 @@ pvalidateParamValue =
 
 prunRules
   :: Term
-      s
-      ( PBuiltinList (PAsData PConfigEntry)
-          :--> PBuiltinList (PBuiltinPair (PAsData PInteger) PData)
-          :--> PBool
-      )
+       s
+       ( PBuiltinList (PAsData PConfigEntry)
+           :--> PBuiltinList (PBuiltinPair (PAsData PInteger) PData)
+           :--> PBool
+       )
 prunRules = phoistAcyclic $ pfix #$ plam $ \self cfg cparams ->
   pelimList
     ( \cfgEntry cfgRest ->
@@ -245,11 +237,11 @@ prunRules = phoistAcyclic $ pfix #$ plam $ \self cfg cparams ->
 
 pwithChangedParams
   :: Term
-      s
-      ( PBuiltinList (PAsData PConfigEntry)
-          :--> PScriptContext
-          :--> PBool
-      )
+       s
+       ( PBuiltinList (PAsData PConfigEntry)
+           :--> PScriptContext
+           :--> PBool
+       )
 pwithChangedParams = phoistAcyclic $ plam $ \config ctx ->
   pmatch ctx $ \(PScriptContext{pscriptContext'scriptInfo}) ->
     pmatch pscriptContext'scriptInfo $ \case
