@@ -20,6 +20,7 @@ All numbers below were produced by the executables in this repository:
 
 - **Source size (eLOC)** &mdash; `cabal run measure-code-size`. eLOC subtracts pragmas, module head, imports, and comments from total lines.
 - **Script size (bytes)** and **execution cost (CPU steps, memory units)** &mdash; `cabal run bench-scripts`. Sizes are serialized UPLC; execution costs are reported by the `plutus-core` CEK evaluator.
+- **Source program jargon level** &mdash; `cabal run measure-jargon-level`. Counts occurrences in `Contracts/*.hs` of DSL-specific identifiers, types, and operators that originate in each language's libraries (e.g. `plet`, `pmatch`, `#==`, `:-->`, `PScriptContext` for Plutarch; `plinthc`, `unsafeFromBuiltinData`, `BI.*`, `DList.*`, `ScriptContext` for Plinth). The two curated lists are kept structurally parallel so every P-prefixed Plutarch ledger type has its unprefixed Plinth counterpart.
 
 Toolchain: Plinth `1.64.0.0`, Plutarch `1.12.0`, GHC `9.6.6`. All ratios are **Plinth / Plutarch** (values below `1.00x` indicate Plinth is smaller or cheaper). 
 
@@ -35,6 +36,25 @@ Toolchain: Plinth `1.64.0.0`, Plutarch `1.12.0`, GHC `9.6.6`. All ratios are **P
 | Certifying     |            52 |          36 |      0.69x |               317 |             381 |      1.20x |
 | Voting         |            55 |          58 |      1.05x |               272 |             244 |      0.90x |
 | **Total**      |      **2000** |    **1242** |  **0.62x** |         **10990** |       **11190** |  **1.02x** |
+
+### Source Program Jargon Level
+
+This metric counts occurrences of DSL-specific identifiers and operators in `Contracts/*.hs`, approximating the vocabulary a reader must learn. Each file is parsed and every name reference is checked against a curated jargon list for its DSL. Only library-imported tokens count: user-defined helpers (e.g. `pcheck`) and user-defined types (e.g. `PVestingDatum`) are excluded, as are pragmas, headers, imports, and comments. The per-line density column uses eLOC from the previous section as the denominator.
+
+The two curated lists are designed to be symmetric. Plutarch's term primitives (`plam`, `plet`, `pmatch`, `pif`, `pfix`, `pelimList`, `phoistAcyclic`, `pfromData`, `pasConstr`, `pfstBuiltin`, ...) are paired against Plinth's term primitives (`plinthc`, `unsafeFromBuiltinData`, `matchInterval`, `matchOutputDatum`, ...) and qualified-builtin prefixes (`BI.*`, `Builtins.*`, `DList.*`, `DMap.*`). Plutarch's operators (`#`, `#$`, `#==`, `#/=`, `#<`, `#<=`, `#>`, `#>=`, `#&&`, `#||`, `:-->`) have no Plinth analogue and contribute only to the Plutarch side. Every P-prefixed Plutarch ledger type (`PScriptContext`, `PTxInfo`, `PTxOut`, `PValue`, `PAddress`, `PPubKeyHash`, all `P{Spending,Voting,...}Script`, `PInterval`, `POutputDatum`, ...) has its unprefixed Plinth counterpart counted on the other side.
+
+| Validator      | Plutarch Jargon | Plinth Jargon | Jargon ratio | Plutarch /eLOC | Plinth /eLOC |
+|----------------|----------------:|--------------:|-------------:|---------------:|-------------:|
+| Smart Tokens   |            1724 |           350 |        0.20x |           1.97 |         0.64 |
+| Guardrail      |             266 |            59 |        0.22x |           1.32 |         0.66 |
+| Crowdfund      |             491 |           112 |        0.23x |           1.74 |         0.60 |
+| Vesting        |             407 |            71 |        0.17x |           1.96 |         0.62 |
+| SundaeSwap NFT |             576 |           106 |        0.18x |           1.76 |         0.51 |
+| Certifying     |             112 |            22 |        0.20x |           2.15 |         0.61 |
+| Voting         |             156 |            47 |        0.30x |           2.84 |         0.81 |
+| **Total**      |        **3732** |       **767** |    **0.21x** |       **1.87** |     **0.62** |
+
+The aggregate Plutarch program emits roughly three times as many jargon tokens per effective line of code as the aggregate Plinth program (1.87 vs 0.62), and 4.9 times the raw absolute count (3,732 vs 767) once the eLOC difference is folded in. The gap is consistent across every validator in the suite: Plutarch's per-eLOC density ranges from 1.32 to 2.84, Plinth's from 0.51 to 0.81. Voting is the only pair where Plinth's eLOC slightly exceeds Plutarch's, yet Plinth's jargon density there (0.81) is still less than a third of Plutarch's (2.84).
 
 ### Execution Cost &mdash; Per-Scenario
 

@@ -169,3 +169,17 @@ executable measure-code-size
     , containers
     , filepath
     , haskell-src-exts
+
+executable measure-jargon-level
+  import:         base, project-config
+  hs-source-dirs: utils
+  main-is:        MeasureJargonLevel.hs
+  ghc-options:
+    -threaded -Wno-missing-import-lists -Wno-missing-export-lists
+    -Wno-missing-deriving-strategies
+
+  build-depends:
+    , containers
+    , filepath
+    , haskell-src-exts
+    , syb
