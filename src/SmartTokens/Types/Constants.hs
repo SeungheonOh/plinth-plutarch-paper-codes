@@ -16,9 +16,9 @@ module SmartTokens.Types.Constants (
   pissuanceCborHexTokenData,
 ) where
 
-import Plutarch.LedgerApi.V1 (PTokenName (..))
+import Plutarch.LedgerApi.V1 (PTokenName)
 import Plutarch.Prelude (PAsData, Term, pconstant)
-import PlutusLedgerApi.V1 (TokenName (..))
+import PlutusLedgerApi.V1 (TokenName (TokenName))
 import PlutusTx.Builtins.HasOpaque (stringToBuiltinByteString)
 
 protocolParamsToken :: TokenName

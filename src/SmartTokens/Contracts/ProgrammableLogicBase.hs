@@ -511,10 +511,10 @@ valueToCred cred inputs =
                 plet (psndBuiltin # (pasConstr # pforgetData txOut)) $ \txOutFields ->
                   let txOutAddress = phead # txOutFields
                       txOutFieldsRest = ptail # txOutFields
-                      ptxOutValue = punsafeCoerce @(PAsData (PValue 'Sorted 'Positive)) (phead # txOutFieldsRest)
+                      txOutValue = punsafeCoerce @(PAsData (PValue 'Sorted 'Positive)) (phead # txOutFieldsRest)
                       paymentCredData = phead # (psndBuiltin # (pasConstr # txOutAddress))
                    in self
-                        # pif (paymentCredData #== credData) (valueUnion # acc # stripAda (pfromData ptxOutValue)) acc
+                        # pif (paymentCredData #== credData) (valueUnion # acc # stripAda (pfromData txOutValue)) acc
                         # xs
             )
             acc

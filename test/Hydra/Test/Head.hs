@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Hydra.Test.Head (
   mkHeadTests,
@@ -19,10 +20,8 @@ import PlutusLedgerApi.V3
 import PlutusTx qualified
 import PlutusTx.Builtins qualified as Builtins
 import ProgrammableTokens.Test.ScriptContext.Builder
-import Test.QuickCheck qualified as QC
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase)
-import Test.Tasty.QuickCheck (testProperty)
 
 import Hydra.Types.HeadState
 

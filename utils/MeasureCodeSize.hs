@@ -1,4 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Main (main) where
 
@@ -208,7 +210,7 @@ preprocessSource = unlines . map fixLine . lines
   stripTypeApp s@(c : cs)
     | c == '(' = stripParens 1 cs
     | isUpper c =
-        let (name, rest) = span (\x -> isIdChar x || x == '.') s
+        let (_name, rest) = span (\x -> isIdChar x || x == '.') s
          in stripTypeApplications rest
     | otherwise = stripTypeApplications s
 
@@ -238,7 +240,6 @@ allSections =
 
 getMetrics :: Section -> SectionMap -> Metrics
 getMetrics s m = Map.findWithDefault emptyMetrics s m
-
 
 data ScriptPair = ScriptPair
   { spName :: String
@@ -279,6 +280,16 @@ allScriptPairs =
       "src/Settings/Contracts/Settings.hs"
       "src/Settings/Contracts/SettingsPlinth.hs"
       (Just "src/Settings/Types/SettingsState.hs")
+  , ScriptPair
+      "Certifying"
+      "src/Certifying/Contracts/Certifying.hs"
+      "src/Certifying/Contracts/CertifyingPlinth.hs"
+      Nothing
+  , ScriptPair
+      "Voting"
+      "src/Voting/Contracts/Voting.hs"
+      "src/Voting/Contracts/VotingPlinth.hs"
+      Nothing
   ]
 
 printComparison :: ScriptPair -> IO ()
@@ -293,40 +304,64 @@ printComparison ScriptPair{..} = do
   putStrLn $ "=== " ++ spName ++ " ==="
   putStrLn ""
 
-  printf "  %-14s  %8s  %8s  %8s\n"
-    ("" :: String) ("Plutarch" :: String) ("Plinth" :: String) ("ratio" :: String)
+  printf
+    "  %-14s  %8s  %8s  %8s\n"
+    ("" :: String)
+    ("Plutarch" :: String)
+    ("Plinth" :: String)
+    ("ratio" :: String)
   putStrLn (replicate 50 '-')
-  printf "  %-14s  %8d  %8d  %8s\n"
-    ("eLOC" :: String) pEloc tEloc
+  printf
+    "  %-14s  %8d  %8d  %8s\n"
+    ("eLOC" :: String)
+    pEloc
+    tEloc
     (ratioStr tEloc pEloc)
-  printf "  %-14s  %8d  %8d\n"
-    ("Total lines" :: String) (fmTotalLines pm) (fmTotalLines tm)
-  printf "  %-14s  %8d  %8d\n"
-    ("Blank lines" :: String) (fmBlankLines pm) (fmBlankLines tm)
+  printf
+    "  %-14s  %8d  %8d\n"
+    ("Total lines" :: String)
+    (fmTotalLines pm)
+    (fmTotalLines tm)
+  printf
+    "  %-14s  %8d  %8d\n"
+    ("Blank lines" :: String)
+    (fmBlankLines pm)
+    (fmBlankLines tm)
   putStrLn ""
 
   putStrLn "  Breakdown (lines):"
-  printf "    %-24s  %8s  %8s\n"
-    ("Section" :: String) ("Plutarch" :: String) ("Plinth" :: String)
+  printf
+    "    %-24s  %8s  %8s\n"
+    ("Section" :: String)
+    ("Plutarch" :: String)
+    ("Plinth" :: String)
   putStrLn (replicate 50 '-')
   mapM_
     ( \section -> do
         let Metrics pLines _ = getMetrics section (fmSections pm)
             Metrics tLines _ = getMetrics section (fmSections tm)
-        printf "    %-24s  %8d  %8d\n"
-          (sectionLabel section) pLines tLines
+        printf
+          "    %-24s  %8d  %8d\n"
+          (sectionLabel section)
+          pLines
+          tLines
     )
     allSections
 
   putStrLn ""
-  printf "  Top-level bindings:  Plutarch = %d,  Plinth = %d\n"
-    (fmTopBindings pm) (fmTopBindings tm)
+  printf
+    "  Top-level bindings:  Plutarch = %d,  Plinth = %d\n"
+    (fmTopBindings pm)
+    (fmTopBindings tm)
 
   case spTypesPath of
     Just typesPath -> do
       typesMetrics <- analyzeFile typesPath
-      printf "  Shared types module:  %s  (%d eLOC, %d total lines)\n"
-        (takeFileName typesPath) (elocOf typesMetrics) (fmTotalLines typesMetrics)
+      printf
+        "  Shared types module:  %s  (%d eLOC, %d total lines)\n"
+        (takeFileName typesPath)
+        (elocOf typesMetrics)
+        (fmTotalLines typesMetrics)
     Nothing -> pure ()
 
   putStrLn ""
@@ -342,22 +377,34 @@ printSummary pairs = do
   putStrLn ""
   putStrLn "Summary: eLOC (effective lines of code)"
   putStrLn (replicate 62 '=')
-  printf "  %-24s | %8s | %8s | %8s\n"
-    ("Validator" :: String) ("Plutarch" :: String) ("Plinth" :: String) ("ratio" :: String)
+  printf
+    "  %-24s | %8s | %8s | %8s\n"
+    ("Validator" :: String)
+    ("Plutarch" :: String)
+    ("Plinth" :: String)
+    ("ratio" :: String)
   putStrLn (replicate 62 '-')
   mapM_
     ( \(n, pm, tm) -> do
         let pEloc = elocOf pm
             tEloc = elocOf tm
-        printf "  %-24s | %8d | %8d | %8s\n"
-          n pEloc tEloc (ratioStr tEloc pEloc)
+        printf
+          "  %-24s | %8d | %8d | %8s\n"
+          n
+          pEloc
+          tEloc
+          (ratioStr tEloc pEloc)
     )
     pairs
   putStrLn (replicate 62 '-')
   let totalP = sum [elocOf pm | (_, pm, _) <- pairs]
       totalT = sum [elocOf tm | (_, _, tm) <- pairs]
-  printf "  %-24s | %8d | %8d | %8s\n"
-    ("TOTAL" :: String) totalP totalT (ratioStr totalT totalP)
+  printf
+    "  %-24s | %8d | %8d | %8s\n"
+    ("TOTAL" :: String)
+    totalP
+    totalT
+    (ratioStr totalT totalP)
   putStrLn (replicate 62 '=')
   putStrLn ""
 

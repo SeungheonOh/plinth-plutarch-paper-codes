@@ -7,6 +7,8 @@
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Hydra.Contracts.Head (
   mkHeadValidator,
@@ -404,8 +406,8 @@ pmustBeSignedByParticipant = phoistAcyclic $ plam $ \ctx headCS ->
                             ( \inp rest' ->
                                 pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) ->
                                   pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value}) ->
-                                    let pts = pfindParticipationTokens # headCS # pfromData ptxOut'value
-                                     in plistAppend # pts # (self # rest')
+                                    let ptsInner = pfindParticipationTokens # headCS # pfromData ptxOut'value
+                                     in plistAppend # ptsInner # (self # rest')
                             )
                             pnil
                             inps

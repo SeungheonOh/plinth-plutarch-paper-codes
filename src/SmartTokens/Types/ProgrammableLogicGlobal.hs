@@ -4,6 +4,8 @@
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module SmartTokens.Types.ProgrammableLogicGlobal (

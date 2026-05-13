@@ -14,7 +14,7 @@ module Hydra.Contracts.HeadPlinth (
 
 import Plinth.Plugin
 import Plutarch.Script (Script (..))
-import PlutusLedgerApi.V1.Value (geq, isZero)
+import PlutusLedgerApi.V1.Value (geq)
 import PlutusLedgerApi.V3
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
@@ -478,8 +478,6 @@ checkClose ownRef txInfo openBefore redeemer =
   checkDeadline =
     closedContestationDeadline closedOut
       == makeContestationDeadline cperiod validRange
-
-  cp = POSIXTime cperiod
 
   tMax = case ivTo validRange of
     UpperBound (Finite t) _ -> t

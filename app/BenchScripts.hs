@@ -24,18 +24,11 @@ import Data.Word (Word8)
 import Hydra.Contracts.Head (mkHeadValidator)
 import Hydra.Contracts.HeadPlinth (plinthHeadScript)
 import Hydra.Test.Head qualified as HydraHead
-import Plutarch.Builtin.Integer (pconstantInteger)
 import Plutarch.Evaluate (applyArguments, evalScript)
-import Plutarch.Internal.Evaluate (evalScript')
 import Plutarch.Internal.Term (Config (NoTracing), Script, Term, compile)
-import Plutarch.LedgerApi.V3 qualified as PlutarchV3
-import Plutarch.Prelude (pconstant, perror, pfromData, pif, plam, pmatch)
 import Plutarch.Script (Script (..))
-import Plutarch.Unsafe (punsafeCoerce)
 import PlutusCore qualified as PLC
 import PlutusCore.DeBruijn
-import PlutusCore.Evaluation.Machine.ExBudget (ExBudget (ExBudget))
-import PlutusCore.Evaluation.Machine.ExMemory (ExCPU (ExCPU), ExMemory (ExMemory))
 import PlutusCore.Pretty
 import PlutusLedgerApi.V1 qualified as PV1
 import PlutusLedgerApi.V1.Value (assetClass, assetClassValue)
@@ -86,11 +79,11 @@ scriptSize :: Script -> Int
 scriptSize (Script prog) = fromIntegral $ LBS.length $ serialise $ SerialiseViaFlat $ UPLC.UnrestrictedProgram prog
 
 printSizes :: String -> Script -> Script -> IO ()
-printSizes name plutarchS plinthS = do
+printSizes _name plutarchS plinthS = do
   let pSize = scriptSize plutarchS
       tSize = scriptSize plinthS
-      ratio = (fromIntegral tSize :: Double) / fromIntegral pSize
-  printf "  Script size: Plutarch = %d bytes, Plinth = %d bytes (%.2fx)\n" pSize tSize ratio
+      sizeRatio = (fromIntegral tSize :: Double) / fromIntegral pSize
+  printf "  Script size: Plutarch = %d bytes, Plinth = %d bytes (%.2fx)\n" pSize tSize sizeRatio
 
 main :: IO ()
 main = do

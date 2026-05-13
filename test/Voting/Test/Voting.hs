@@ -77,15 +77,15 @@ mkVotingContextWithInputs voter inputs =
   buildScriptContext
     ( withVotingScript (PlutusTx.toBuiltinData ()) voter
         <> mconcat
-          [ case txOutAddress of
+          [ case inAddr of
               Address (ScriptCredential _) _ ->
                 withScriptInput
                   (PlutusTx.toBuiltinData ())
-                  (withOutRef ref <> withAddress txOutAddress <> withValue val)
+                  (withOutRef ref <> withAddress inAddr <> withValue val)
               _ ->
                 withInput
-                  (withOutRef ref <> withAddress txOutAddress <> withValue val)
-          | (txOutAddress, val, ref) <- inputs
+                  (withOutRef ref <> withAddress inAddr <> withValue val)
+          | (inAddr, val, ref) <- inputs
           ]
     )
 
@@ -95,17 +95,20 @@ mkVotingContextWithInputs voter inputs =
 
 posNFTInScriptInput :: ScriptContext
 posNFTInScriptInput =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(someScriptAddr, nftValue, TxOutRef "aa00" 0)]
 
 posNFTInPubKeyInput :: ScriptContext
 posNFTInPubKeyInput =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(somePkhAddr, nftValue, TxOutRef "aa00" 0)]
 
 posNFTAmongMultipleInputs :: ScriptContext
 posNFTAmongMultipleInputs =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [ (somePkhAddr, adaOnlyValue, TxOutRef "aa00" 0)
     , (somePkhAddr, nftValue, TxOutRef "bb00" 0)
     , (somePkhAddr, adaOnlyValue, TxOutRef "cc00" 0)
@@ -113,7 +116,8 @@ posNFTAmongMultipleInputs =
 
 posNFTWithOtherTokens :: ScriptContext
 posNFTWithOtherTokens =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(somePkhAddr, nftValue <> otherNFTValue, TxOutRef "aa00" 0)]
 
 -- ============================================================================
@@ -122,17 +126,20 @@ posNFTWithOtherTokens =
 
 negNoNFTInInputs :: ScriptContext
 negNoNFTInInputs =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(somePkhAddr, adaOnlyValue, TxOutRef "aa00" 0)]
 
 negWrongCS :: ScriptContext
 negWrongCS =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(somePkhAddr, otherNFTValue, TxOutRef "aa00" 0)]
 
 negWrongTN :: ScriptContext
 negWrongTN =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [(somePkhAddr, mkAdaValue 5_000_000 <> assetClassValue (assetClass nftCS otherTN) 1, TxOutRef "aa00" 0)]
 
 negEmptyInputs :: ScriptContext
@@ -141,7 +148,8 @@ negEmptyInputs =
 
 negMultipleInputsNoNFT :: ScriptContext
 negMultipleInputsNoNFT =
-  mkVotingContextWithInputs someVoter
+  mkVotingContextWithInputs
+    someVoter
     [ (somePkhAddr, adaOnlyValue, TxOutRef "aa00" 0)
     , (somePkhAddr, adaOnlyValue, TxOutRef "bb00" 0)
     , (somePkhAddr, otherNFTValue, TxOutRef "cc00" 0)

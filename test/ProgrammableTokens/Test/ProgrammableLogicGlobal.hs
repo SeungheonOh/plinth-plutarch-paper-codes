@@ -41,7 +41,6 @@ import ProgrammableTokens.Test.ScriptContext.Builder (
   withWithdrawal,
  )
 import SmartTokens.Contracts.ProgrammableLogicBase (
-  mkProgrammableLogicGlobal,
   outputsContainExpectedValueAtCred,
   pscriptContextTxInfo,
  )

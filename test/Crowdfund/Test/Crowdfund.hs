@@ -17,10 +17,8 @@ import PlutusLedgerApi.V3
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
 import ProgrammableTokens.Test.ScriptContext.Builder
-import Test.QuickCheck qualified as QC
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase)
-import Test.Tasty.QuickCheck (testProperty)
 
 import Crowdfund.Types.CrowdfundState
 
@@ -51,9 +49,6 @@ donor3Pkh = PubKeyHash (bs28 0x04)
 
 contractUtxoRef :: TxOutRef
 contractUtxoRef = TxOutRef (TxId (bs28 0xAA)) 0
-
-pubKeyAddress :: PubKeyHash -> Address
-pubKeyAddress pkh = Address (PubKeyCredential pkh) Nothing
 
 defaultDeadline :: POSIXTime
 defaultDeadline = POSIXTime 1000

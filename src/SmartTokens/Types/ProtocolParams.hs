@@ -4,6 +4,7 @@
 {-# OPTIONS_GHC -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# OPTIONS_GHC -fexpose-all-unfoldings #-}
 
 module SmartTokens.Types.ProtocolParams (
@@ -29,7 +30,6 @@ import PlutusLedgerApi.Data.V3 qualified as DV3
 import PlutusLedgerApi.V3 (Credential, CurrencySymbol)
 import PlutusTx qualified
 import PlutusTx.AsData (asData)
-import PlutusTx.Builtins (BuiltinData)
 
 -- ============================================================================
 -- Plinth type
