@@ -1,0 +1,139 @@
+# Plinth Plutarch Paper Codes
+
+This repository ports 7 Cardano smart contracts to both Plinth and Plutarch from their original implementations. The table below summarizes each contract's script purpose, original source, and the language it was originally written in.
+
+| Validator | Script Purpose | Original Source | Original Language | Description |
+|---|---|---|---|---|
+| [Smart Tokens](./src/SmartTokens) | Rewarding | [input-output-hk/wsc-poc](https://github.com/input-output-hk/wsc-poc) | Plutarch | ERC-20 style programmable tokens |
+| [Guardrail](./src/Constitution) | Proposing | [IntersectMBO/plutus &mdash; cardano-constitution](https://github.com/IntersectMBO/plutus/tree/master/cardano-constitution) | Plinth | Guardrails for governance proposals |
+| [Crowdfund](./src/Crowdfund) | Spending | [blockchain-unica/rosetta-smart-contracts](https://github.com/blockchain-unica/rosetta-smart-contracts) | Aiken | Fundraising with refund |
+| [Vesting](./src/Vesting) | Spending | [blockchain-unica/rosetta-smart-contracts](https://github.com/blockchain-unica/rosetta-smart-contracts) | Aiken | Time-locked release of funds |
+| [SundaeSwap NFT](./src/Settings) | Minting | [SundaeSwap-finance/sundae-contracts](https://github.com/SundaeSwap-finance/sundae-contracts) | Aiken | Minting of authorizing NFT |
+| [Certifying](./src/Certifying) | Certifying | [SundaeSwap-finance/treasury-contracts &mdash; treasury.ak](https://github.com/SundaeSwap-finance/treasury-contracts/blob/main/validators/treasury.ak#L83), [vendor.ak](https://github.com/SundaeSwap-finance/treasury-contracts/blob/main/validators/vendor.ak#L57) | Aiken | Vote-delegation certificate validation |
+| [Voting](./src/Voting) | Voting | [IntersectMBO/credential-manager &mdash; HotCommittee.hs](https://github.com/IntersectMBO/credential-manager/blob/main/credential-manager/src/CredentialManager/Scripts/HotCommittee.hs) | Plinth | Hot committee credential script |
+
+All data is collected using Plinth compiler version `1.64.0.0` and Plutarch version `1.12.0`. Both Plinth and Plutarch depend on `plutus-core`, which provides the UPLC virtual machine that executes scripts and measures their execution budget. To make both languages buildable within a single project, we use a fork of Plutarch. The changes in the fork are minimal and self-contained: they only adapt Plutarch to interface changes in the `plutus-core` library.
+
+## Benchmarks
+
+All numbers below were produced by the executables in this repository:
+
+- **Source size (eLOC)** &mdash; `cabal run measure-code-size`. eLOC subtracts pragmas, module head, imports, and comments from total lines.
+- **Script size (bytes)** and **execution cost (CPU steps, memory units)** &mdash; `cabal run bench-scripts`. Sizes are serialized UPLC; execution costs are reported by the `plutus-core` CEK evaluator.
+
+Toolchain: Plinth `1.64.0.0`, Plutarch `1.12.0`, GHC `9.6.6`. All ratios are **Plinth / Plutarch** (values below `1.00x` indicate Plinth is smaller or cheaper). 
+
+### Script Sizes and eLOC
+
+| Validator      | Plutarch eLOC | Plinth eLOC | eLOC ratio | Plutarch Size (Bytes) | Plinth Size | Size ratio |
+|----------------|--------------:|------------:|-----------:|------------------:|----------------:|-----------:|
+| Smart Tokens   |           874 |         549 |      0.63x |              4080 |            3902 |      0.96x |
+| Guardrail      |           202 |          89 |      0.44x |               769 |             798 |      1.04x |
+| Crowdfund      |           282 |         188 |      0.67x |              1888 |            2203 |      1.17x |
+| Vesting        |           208 |         114 |      0.55x |              1502 |            1187 |      0.79x |
+| SundaeSwap NFT |           327 |         208 |      0.64x |              2162 |            2475 |      1.14x |
+| Certifying     |            52 |          36 |      0.69x |               317 |             381 |      1.20x |
+| Voting         |            55 |          58 |      1.05x |               272 |             244 |      0.90x |
+| **Total**      |      **2000** |    **1242** |  **0.62x** |         **10990** |       **11190** |  **1.02x** |
+
+### Execution Cost &mdash; Per-Scenario
+
+Only accepting scenarios are reported below. Rejecting scenarios are excluded because the two implementations may short-circuit at different program points, so their costs do not measure equivalent work. This restriction also reflects the Cardano execution model faithfully: a transaction is pre-evaluated off-chain before submission to confirm that its scripts succeed, so failing scripts never run on-chain and never incur fees.
+
+Rejecting cases and some property based test cases are still exercised by the test suite to ensure that the Plinth and Plutarch implementations agree on every validation outcome, accepting and rejecting alike.
+
+#### Smart Tokens (CIP-143 ProgrammableLogicGlobal)
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| seize: 1 input, complete indices | 63,419,946 | 183,327 | 67,614,449 | 206,555 | 1.07x | 1.13x |
+| seize: 3 inputs, complete indices | 118,475,280 | 314,359 | 124,217,603 | 356,633 | 1.05x | 1.13x |
+| seize: 5 inputs, complete indices | 173,530,614 | 445,391 | 180,724,757 | 506,111 | 1.04x | 1.14x |
+| seize: 10 inputs, complete indices | 306,205,003 | 752,741 | 321,935,067 | 879,690 | 1.05x | 1.17x |
+| seize: burn offsets delta | 56,695,996 | 168,717 | 63,678,755 | 192,801 | 1.12x | 1.14x |
+| seize: mint contained | 74,633,703 | 214,137 | 79,615,104 | 235,009 | 1.07x | 1.10x |
+| transfer: burn with mint proof | 64,551,650 | 190,015 | 74,905,237 | 235,436 | 1.16x | 1.24x |
+| transfer: mint with proof+containment | 74,978,711 | 220,177 | 86,435,015 | 261,008 | 1.15x | 1.19x |
+
+#### Guardrail (Constitution)
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| pos1: multi int params | 56,175,867 | 197,580 | 61,459,879 | 224,790 | 1.09x | 1.14x |
+| pos2: single rational | 30,217,303 | 100,948 | 32,850,499 | 117,188 | 1.09x | 1.16x |
+| pos3: list param | 54,843,709 | 186,140 | 60,988,771 | 221,604 | 1.11x | 1.19x |
+| pos4: empty params | 5,094,145 | 17,573 | 5,233,151 | 19,241 | 1.03x | 1.09x |
+| pos5: treasury withdrawal | 4,383,006 | 15,015 | 4,959,103 | 18,615 | 1.13x | 1.24x |
+
+#### Crowdfund
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| donate: new donor | 75,126,464 | 204,741 | 62,799,985 | 195,231 | 0.84x | 0.95x |
+| donate: existing donor | 79,649,731 | 215,429 | 68,100,287 | 204,556 | 0.85x | 0.95x |
+| donate: second donor | 83,804,024 | 224,715 | 73,573,611 | 215,877 | 0.88x | 0.96x |
+| withdraw: valid | 39,262,728 | 115,627 | 36,906,989 | 116,644 | 0.94x | 1.01x |
+| reclaim: multiple donors | 100,833,696 | 266,634 | 65,427,192 | 200,981 | 0.65x | 0.75x |
+| reclaim: last donor | 69,095,835 | 184,871 | 39,138,240 | 123,067 | 0.57x | 0.67x |
+
+#### Vesting
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| full withdrawal after vesting | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
+| partial withdrawal midpoint | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| second partial withdrawal | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| full withdrawal at end | 63,364,345 | 171,064 | 42,897,827 | 127,944 | 0.68x | 0.75x |
+| small withdrawal early | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| third partial drains | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
+| odd division partial | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| multi beneficiary outputs | 68,719,539 | 187,321 | 48,605,874 | 146,573 | 0.71x | 0.78x |
+| zero fee | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
+| quarter vested | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| ninety percent | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+
+#### SundaeSwap NFT (Settings)
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| settings admin: update scoopers | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update base fee | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update simple fee | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update strategy fee | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update pool creation fee | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update metadata admin | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update settings admin | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update treasury admin | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update extensions | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: update multiple fields | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: no change | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| settings admin: lovelace change | 56,407,319 | 138,607 | 57,207,215 | 163,440 | 1.01x | 1.18x |
+| treasury admin: update treasury addr | 67,885,696 | 157,223 | 66,407,544 | 177,654 | 0.98x | 1.13x |
+| treasury admin: update staking keys | 67,885,696 | 157,223 | 66,407,544 | 177,654 | 0.98x | 1.13x |
+| treasury admin: update allowance | 67,885,696 | 157,223 | 66,407,544 | 177,654 | 0.98x | 1.13x |
+| treasury admin: update multiple fields | 67,885,696 | 157,223 | 66,407,544 | 177,654 | 0.98x | 1.13x |
+| treasury admin: no change | 67,885,696 | 157,223 | 66,407,544 | 177,654 | 0.98x | 1.13x |
+| multisig: allof valid | 63,442,939 | 165,487 | 68,902,514 | 204,048 | 1.09x | 1.23x |
+| multisig: anyof valid | 62,700,268 | 162,559 | 66,148,660 | 195,252 | 1.05x | 1.20x |
+| multisig: atleast valid | 69,480,618 | 187,743 | 79,763,884 | 239,430 | 1.15x | 1.28x |
+| multisig: before valid | 65,619,468 | 170,784 | 68,493,405 | 207,250 | 1.04x | 1.21x |
+| multisig: after valid | 65,808,734 | 171,654 | 68,987,053 | 209,222 | 1.05x | 1.22x |
+| mint: valid | 19,695,803 | 60,808 | 25,208,642 | 84,816 | 1.28x | 1.39x |
+
+#### Certifying
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| register credential | 3,281,634 | 11,753 | 3,235,577 | 11,084 | 0.99x | 0.94x |
+| unregister after expiration | 7,886,843 | 24,094 | 8,633,363 | 26,629 | 1.09x | 1.11x |
+| delegate to abstain | 5,907,816 | 18,612 | 5,528,026 | 17,948 | 0.94x | 0.96x |
+| register+delegate to abstain | 6,386,093 | 19,946 | 5,832,408 | 19,050 | 0.91x | 0.96x |
+
+#### Voting
+
+| Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| nft in script input | 12,244,560 | 30,755 | 11,461,062 | 27,727 | 0.94x | 0.90x |
+| nft in pubkey input | 12,244,560 | 30,755 | 11,461,062 | 27,727 | 0.94x | 0.90x |
+| nft among multiple inputs | 17,129,982 | 44,166 | 15,661,615 | 37,374 | 0.91x | 0.85x |
+| nft with other tokens | 12,244,560 | 30,755 | 11,461,062 | 27,727 | 0.94x | 0.90x |
