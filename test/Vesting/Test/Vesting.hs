@@ -422,7 +422,12 @@ mkWrongBeneficiaryOutputCtx =
 
 mkPartialWithdrawalWrongDatumCtx :: ScriptContext
 mkPartialWithdrawalWrongDatumCtx =
-  let tamperedDatum = VestingDatum (vdBeneficiary defaultDatum) (vdStartTimestamp defaultDatum) (vdDuration defaultDatum) 999_999_999
+  let tamperedDatum =
+        VestingDatum
+          (vdBeneficiary defaultDatum)
+          (vdStartTimestamp defaultDatum)
+          (vdDuration defaultDatum)
+          999_999_999
    in mkReleaseCtx
         defaultDatum
         100_000_000
@@ -495,7 +500,12 @@ mkBeforeVestingStartsCtx =
 
 mkPartialWithdrawalBeneficiaryChangedCtx :: ScriptContext
 mkPartialWithdrawalBeneficiaryChangedCtx =
-  let tamperedDatum = VestingDatum otherPkh (vdStartTimestamp defaultDatum) (vdDuration defaultDatum) (vdAmount defaultDatum)
+  let tamperedDatum =
+        VestingDatum
+          otherPkh
+          (vdStartTimestamp defaultDatum)
+          (vdDuration defaultDatum)
+          (vdAmount defaultDatum)
    in mkReleaseCtx
         defaultDatum
         100_000_000
@@ -508,7 +518,12 @@ mkPartialWithdrawalBeneficiaryChangedCtx =
 
 mkPartialWithdrawalDurationChangedCtx :: ScriptContext
 mkPartialWithdrawalDurationChangedCtx =
-  let tamperedDatum = VestingDatum (vdBeneficiary defaultDatum) (vdStartTimestamp defaultDatum) 1_000 (vdAmount defaultDatum)
+  let tamperedDatum =
+        VestingDatum
+          (vdBeneficiary defaultDatum)
+          (vdStartTimestamp defaultDatum)
+          1_000
+          (vdAmount defaultDatum)
    in mkReleaseCtx
         defaultDatum
         100_000_000
@@ -767,7 +782,8 @@ genFullAmountContext datum = do
       linearVested = linearVestingCalc (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum) timestamp
       released = vdAmount datum - contractAmount
       correctRelease = linearVested - released
-  declaredAmount <- QC.frequency [(6, pure correctRelease), (4, QC.chooseInteger (-1, vdAmount datum + 1))]
+  declaredAmount <-
+    QC.frequency [(6, pure correctRelease), (4, QC.chooseInteger (-1, vdAmount datum + 1))]
   signer <- QC.frequency [(7, pure (vdBeneficiary datum)), (3, pure otherPkh)]
   fee <- QC.elements [0, defaultFee, 500_000]
   let beneInputAda = defaultBeneficiaryInputAda
@@ -777,7 +793,9 @@ genFullAmountContext datum = do
   let mOutputDatum
         | isFullWithdrawal = Nothing
         | useCorrectOutput = Just datum
-        | otherwise = Just (VestingDatum (vdBeneficiary datum) (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum + 1))
+        | otherwise =
+            Just
+              (VestingDatum (vdBeneficiary datum) (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum + 1))
   pure $
     mkReleaseCtx
       datum
@@ -793,11 +811,13 @@ genPartialStateContext :: VestingDatum -> QC.Gen ScriptContext
 genPartialStateContext datum = do
   previousWithdrawFraction <- QC.chooseInteger (1, 9)
   let contractAmount = vdAmount datum - (vdAmount datum * previousWithdrawFraction `div` 10)
-  timestamp <- QC.chooseInteger (vdStartTimestamp datum, vdStartTimestamp datum + vdDuration datum + 5_000)
+  timestamp <-
+    QC.chooseInteger (vdStartTimestamp datum, vdStartTimestamp datum + vdDuration datum + 5_000)
   let linearVested = linearVestingCalc (vdStartTimestamp datum) (vdDuration datum) (vdAmount datum) timestamp
       released = vdAmount datum - contractAmount
       correctRelease = linearVested - released
-  declaredAmount <- QC.frequency [(6, pure correctRelease), (4, QC.chooseInteger (-1, contractAmount + 1))]
+  declaredAmount <-
+    QC.frequency [(6, pure correctRelease), (4, QC.chooseInteger (-1, contractAmount + 1))]
   signer <- QC.frequency [(8, pure (vdBeneficiary datum)), (2, pure otherPkh)]
   let fee = defaultFee
       beneInputAda = defaultBeneficiaryInputAda
@@ -807,7 +827,9 @@ genPartialStateContext datum = do
   let mOutputDatum
         | isFullWithdrawal = Nothing
         | useCorrectOutput = Just datum
-        | otherwise = Just (VestingDatum (vdBeneficiary datum) (vdStartTimestamp datum) (vdDuration datum + 1) (vdAmount datum))
+        | otherwise =
+            Just
+              (VestingDatum (vdBeneficiary datum) (vdStartTimestamp datum) (vdDuration datum + 1) (vdAmount datum))
   pure $
     mkReleaseCtx
       datum
@@ -832,7 +854,9 @@ genOddDivisionContext = do
           }
   timestamp <- QC.chooseInteger (1, dur - 1)
   let correctRelease = linearVestingCalc 0 dur amt timestamp
-  declaredAmount <- QC.frequency [(5, pure correctRelease), (3, pure (correctRelease + 1)), (2, pure (correctRelease - 1))]
+  declaredAmount <-
+    QC.frequency
+      [(5, pure correctRelease), (3, pure (correctRelease + 1)), (2, pure (correctRelease - 1))]
   let fee = defaultFee
       beneInputAda = defaultBeneficiaryInputAda
       validRange = atTime timestamp

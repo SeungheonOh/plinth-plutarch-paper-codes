@@ -87,7 +87,10 @@ addMint ctx newMint redeemer =
       mintCS = head $ Map.keys $ getValue newMint
       existingRedeemers = txInfoRedeemers (scriptContextTxInfo ctx)
       updatedRedeemers = Map.insert (Minting mintCS) (Redeemer redeemer) existingRedeemers
-   in ctx{scriptContextTxInfo = (scriptContextTxInfo ctx){txInfoMint = mergedMint, txInfoRedeemers = updatedRedeemers}}
+   in ctx
+        { scriptContextTxInfo =
+            (scriptContextTxInfo ctx){txInfoMint = mergedMint, txInfoRedeemers = updatedRedeemers}
+        }
 
 addInput :: TxInInfo -> ScriptContext -> ScriptContext
 addInput newInput ctx =
@@ -255,7 +258,10 @@ addChangeOutput signerPkh ctx =
       mintedValue = Value $ mintValueToMap (txInfoMint (scriptContextTxInfo ctx))
       changeValue = mintedValue <> totalInputValue <> negateValue feeValue <> negateValue totalOutputValue
       changeOutput = TxOut (pubKeyHashAddress signerPkh) changeValue NoOutputDatum Nothing
-   in ctx{scriptContextTxInfo = (scriptContextTxInfo ctx){txInfoOutputs = changeOutput : txInfoOutputs (scriptContextTxInfo ctx)}}
+   in ctx
+        { scriptContextTxInfo =
+            (scriptContextTxInfo ctx){txInfoOutputs = changeOutput : txInfoOutputs (scriptContextTxInfo ctx)}
+        }
 
 balanceWithChangeOutput :: ScriptContext -> ScriptContext
 balanceWithChangeOutput ctx =
@@ -269,7 +275,10 @@ balanceWithChangeOutput ctx =
       mintedValue = Value $ mintValueToMap (txInfoMint (scriptContextTxInfo ctx))
       changeValue = mintedValue <> totalInputValue <> negateValue feeValue <> negateValue totalOutputValue
       changeOutput = TxOut (pubKeyHashAddress signerPkh) changeValue NoOutputDatum Nothing
-   in ctx{scriptContextTxInfo = (scriptContextTxInfo ctx){txInfoOutputs = txInfoOutputs (scriptContextTxInfo ctx) <> [changeOutput]}}
+   in ctx
+        { scriptContextTxInfo =
+            (scriptContextTxInfo ctx){txInfoOutputs = txInfoOutputs (scriptContextTxInfo ctx) <> [changeOutput]}
+        }
  where
   isPubKeyAddress :: Address -> Bool
   isPubKeyAddress (Address (PubKeyCredential _) _) = True
@@ -277,7 +286,12 @@ balanceWithChangeOutput ctx =
 
 addSigner :: PubKeyHash -> ScriptContext -> ScriptContext
 addSigner signerPkh ctx =
-  ctx{scriptContextTxInfo = (scriptContextTxInfo ctx){txInfoSignatories = signerPkh : txInfoSignatories (scriptContextTxInfo ctx)}}
+  ctx
+    { scriptContextTxInfo =
+        (scriptContextTxInfo ctx)
+          { txInfoSignatories = signerPkh : txInfoSignatories (scriptContextTxInfo ctx)
+          }
+    }
 
 signAndAddChangeOutput :: PubKeyHash -> ScriptContext -> ScriptContext
 signAndAddChangeOutput signerPkh ctx =
@@ -370,7 +384,11 @@ withScriptInput redeemer modify = ScriptContextBuilder $ \scb ->
       inputOutRef = txInInfoOutRef newInput
       newRedeemers = Map.insert (Spending inputOutRef) (Redeemer redeemer) (scbRedeemers scb)
    in if isScriptAddress (txOutAddress $ txInInfoResolved newInput)
-        then scb{scbInputs = insertBy (comparing txInInfoOutRef) newInput (scbInputs scb), scbRedeemers = newRedeemers}
+        then
+          scb
+            { scbInputs = insertBy (comparing txInInfoOutRef) newInput (scbInputs scb)
+            , scbRedeemers = newRedeemers
+            }
         else error "withScriptInput: Input address is not a script address"
  where
   isScriptAddress :: Address -> Bool
@@ -401,7 +419,12 @@ withSpendingScript redeemer modify = ScriptContextBuilder $ \scb ->
           NoOutputDatum -> Nothing
           OutputDatum (Datum dat) -> Just (Datum dat)
           _ -> Nothing
-   in scb{scbScriptInfo = SpendingScript outRef datum, scbInputs = insertBy (comparing txInInfoOutRef) scriptInput (scbInputs scb), scbRedeemers = newRedeemers, scbRedeemer = redeemer}
+   in scb
+        { scbScriptInfo = SpendingScript outRef datum
+        , scbInputs = insertBy (comparing txInInfoOutRef) scriptInput (scbInputs scb)
+        , scbRedeemers = newRedeemers
+        , scbRedeemer = redeemer
+        }
 
 withRewardingScript :: BuiltinData -> Credential -> Integer -> ScriptContextBuilder
 withRewardingScript redeemer cred adaAmount =
@@ -415,7 +438,8 @@ withRewardingScript redeemer cred adaAmount =
           , scbScriptInfo = RewardingScript cred
           }
 
-withRewardingScriptWithBuilder :: (ScriptContextBuilderState -> BuiltinData) -> Credential -> Integer -> ScriptContextBuilder
+withRewardingScriptWithBuilder
+  :: (ScriptContextBuilderState -> BuiltinData) -> Credential -> Integer -> ScriptContextBuilder
 withRewardingScriptWithBuilder mkRedeemer cred adaAmount =
   ScriptContextBuilder $ \scb ->
     let redeemer = mkRedeemer scb
@@ -523,7 +547,8 @@ buildBalancedScriptContext modify =
           , txInfoReferenceInputs = scbReferenceInputs finalState
           , txInfoOutputs = scbOutputs finalState
           , txInfoMint = UnsafeMintValue $ getValue (scbMint finalState)
-          , txInfoRedeemers = Map.unsafeFromList $ sortBy (comparePurposeLedger `on` fst) $ Map.toList $ scbRedeemers finalState
+          , txInfoRedeemers =
+              Map.unsafeFromList $ sortBy (comparePurposeLedger `on` fst) $ Map.toList $ scbRedeemers finalState
           , txInfoFee = fromIntegral (scbFee finalState)
           , txInfoSignatories = scbSignatories finalState
           , txInfoTxCerts = scbCerts finalState
@@ -536,4 +561,5 @@ buildBalancedScriptContext modify =
           , txInfoCurrentTreasuryAmount = Nothing
           , txInfoTreasuryDonation = Nothing
           }
-   in balanceWithChangeOutput $ ScriptContext txInfo (Redeemer $ scbRedeemer finalState) (scbScriptInfo finalState)
+   in balanceWithChangeOutput $
+        ScriptContext txInfo (Redeemer $ scbRedeemer finalState) (scbScriptInfo finalState)

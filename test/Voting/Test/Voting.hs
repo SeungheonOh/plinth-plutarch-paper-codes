@@ -140,7 +140,12 @@ negWrongTN :: ScriptContext
 negWrongTN =
   mkVotingContextWithInputs
     someVoter
-    [(somePkhAddr, mkAdaValue 5_000_000 <> assetClassValue (assetClass nftCS otherTN) 1, TxOutRef "aa00" 0)]
+    [
+      ( somePkhAddr
+      , mkAdaValue 5_000_000 <> assetClassValue (assetClass nftCS otherTN) 1
+      , TxOutRef "aa00" 0
+      )
+    ]
 
 negEmptyInputs :: ScriptContext
 negEmptyInputs =

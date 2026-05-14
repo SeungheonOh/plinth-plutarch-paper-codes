@@ -244,19 +244,43 @@ crowdfundValidator
   -> TxOutRef
   -> TxInfo
   -> Bool
-crowdfundValidator recipient goal deadline wallets redeemerData ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoSignatories = sigs} =
-  let ownInput = findOwnInput ownRef inputs
-      contractAddress = txOutAddress (txInInfoResolved ownInput)
-      contractInputs = getInputsByAddress inputs contractAddress
-      contractOutputs = getOutputsByAddress outputs contractAddress
-      contractAmount = sumWallets wallets
-   in contractAmount
-        == getAdaFromInputs contractInputs
-        && matchCrowdfundRedeemerD
-          (unsafeFromBuiltinData redeemerData)
-          (\amount donor -> checkDonate recipient goal deadline wallets validRange sigs contractOutputs contractAmount amount donor)
-          (checkWithdraw recipient goal deadline validRange sigs contractAmount)
-          (checkReclaim recipient goal deadline wallets validRange sigs contractInputs contractOutputs)
+crowdfundValidator
+  recipient
+  goal
+  deadline
+  wallets
+  redeemerData
+  ownRef
+  TxInfo
+    { txInfoInputs = inputs
+    , txInfoOutputs = outputs
+    , txInfoValidRange = validRange
+    , txInfoSignatories = sigs
+    } =
+    let ownInput = findOwnInput ownRef inputs
+        contractAddress = txOutAddress (txInInfoResolved ownInput)
+        contractInputs = getInputsByAddress inputs contractAddress
+        contractOutputs = getOutputsByAddress outputs contractAddress
+        contractAmount = sumWallets wallets
+     in contractAmount
+          == getAdaFromInputs contractInputs
+          && matchCrowdfundRedeemerD
+            (unsafeFromBuiltinData redeemerData)
+            ( \amount donor ->
+                checkDonate
+                  recipient
+                  goal
+                  deadline
+                  wallets
+                  validRange
+                  sigs
+                  contractOutputs
+                  contractAmount
+                  amount
+                  donor
+            )
+            (checkWithdraw recipient goal deadline validRange sigs contractAmount)
+            (checkReclaim recipient goal deadline wallets validRange sigs contractInputs contractOutputs)
 
 -- ============================================================================
 -- 7. Entry point and compiled script
@@ -266,7 +290,11 @@ crowdfundValidator recipient goal deadline wallets redeemerData ownRef TxInfo{tx
 mkCrowdfundValidator :: BuiltinData -> ()
 mkCrowdfundValidator ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+      ScriptContext
+        { scriptContextTxInfo = txInfo
+        , scriptContextRedeemer = redeemer
+        , scriptContextScriptInfo = scriptInfo
+        } = ctx
    in case scriptInfo of
         SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @CrowdfundDatumD datumData
@@ -276,7 +304,9 @@ mkCrowdfundValidator ctxData =
                 , cfDeadlineD = deadline
                 , cfWalletsD = wallets
                 } = datum
-           in if crowdfundValidator recipient goal deadline wallets (getRedeemer redeemer) ownRef txInfo then () else error ()
+           in if crowdfundValidator recipient goal deadline wallets (getRedeemer redeemer) ownRef txInfo
+                then ()
+                else error ()
         _ -> error ()
 
 plinthCrowdfundScript :: Script

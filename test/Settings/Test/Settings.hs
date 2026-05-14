@@ -435,7 +435,10 @@ mkMultisigAnyOfValid =
 
 mkMultisigAtLeastDatum :: SettingsDatum
 mkMultisigAtLeastDatum =
-  mkDefaultDatum{sdSettingsAdmin = AtLeast 2 [Signature settingsAdminPkh, Signature treasuryAdminPkh, Signature randomPkh]}
+  mkDefaultDatum
+    { sdSettingsAdmin =
+        AtLeast 2 [Signature settingsAdminPkh, Signature treasuryAdminPkh, Signature randomPkh]
+    }
 
 mkMultisigAtLeastValid :: ScriptContext
 mkMultisigAtLeastValid =
@@ -766,11 +769,14 @@ mkSettingsTests name script =
             , testCase "update_multiple_fields_valid" $ assertSucceeds mkSettingsAdminUpdateMultipleFieldsValid
             , testCase "no_change_valid" $ assertSucceeds mkSettingsAdminNoChangeValid
             , testCase "lovelace_change_valid" $ assertSucceeds mkSettingsAdminLovelaceChangeValid
-            , testCase "change_treasury_address_rejected" $ assertFails mkSettingsAdminChangeTreasuryAddressRejected
+            , testCase "change_treasury_address_rejected" $
+                assertFails mkSettingsAdminChangeTreasuryAddressRejected
             , testCase "change_staking_keys_rejected" $ assertFails mkSettingsAdminChangeStakingKeysRejected
-            , testCase "change_treasury_allowance_rejected" $ assertFails mkSettingsAdminChangeTreasuryAllowanceRejected
+            , testCase "change_treasury_allowance_rejected" $
+                assertFails mkSettingsAdminChangeTreasuryAllowanceRejected
             , testCase "wrong_signer_rejected" $ assertFails mkSettingsAdminWrongSignerRejected
-            , testCase "cross_redeemer_wrong_admin_rejected" $ assertFails mkSettingsAdminRedeemerTreasurySignerRejected
+            , testCase "cross_redeemer_wrong_admin_rejected" $
+                assertFails mkSettingsAdminRedeemerTreasurySignerRejected
             , testCase "value_changed_rejected" $ assertFails mkSettingsAdminValueChangedRejected
             , testCase "mint_rejected" $ assertFails mkSettingsAdminMintRejected
             , testCase "output_address_changed_rejected" $ assertFails mkSettingsAdminOutputAddressChangedRejected
@@ -790,10 +796,12 @@ mkSettingsTests name script =
             , testCase "change_base_fee_rejected" $ assertFails mkTreasuryAdminChangeBaseFeeRejected
             , testCase "change_simple_fee_rejected" $ assertFails mkTreasuryAdminChangeSimpleFeeRejected
             , testCase "change_strategy_fee_rejected" $ assertFails mkTreasuryAdminChangeStrategyFeeRejected
-            , testCase "change_pool_creation_fee_rejected" $ assertFails mkTreasuryAdminChangePoolCreationFeeRejected
+            , testCase "change_pool_creation_fee_rejected" $
+                assertFails mkTreasuryAdminChangePoolCreationFeeRejected
             , testCase "change_extensions_rejected" $ assertFails mkTreasuryAdminChangeExtensionsRejected
             , testCase "wrong_signer_rejected" $ assertFails mkTreasuryAdminWrongSignerRejected
-            , testCase "cross_redeemer_wrong_admin_rejected" $ assertFails mkTreasuryAdminRedeemerSettingsSignerRejected
+            , testCase "cross_redeemer_wrong_admin_rejected" $
+                assertFails mkTreasuryAdminRedeemerSettingsSignerRejected
             ]
         , testGroup
             "Multisig"

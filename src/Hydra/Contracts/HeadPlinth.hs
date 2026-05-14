@@ -287,14 +287,22 @@ decodeHeadOutputOpenDatum outputs ownRef inputs =
 -- ============================================================================
 
 {-# INLINEABLE verifySnapshotSignature #-}
-verifySnapshotSignature :: [BuiltinByteString] -> (CurrencySymbol, SnapshotVersion, SnapshotNumber, Hash, Hash, Hash) -> [Signature] -> Bool
+verifySnapshotSignature
+  :: [BuiltinByteString]
+  -> (CurrencySymbol, SnapshotVersion, SnapshotNumber, Hash, Hash, Hash)
+  -> [Signature]
+  -> Bool
 verifySnapshotSignature parties msg sigs =
   listLength parties
     == listLength sigs
     && listAll (uncurry $ verifyPartySignature msg) (L.zip parties sigs)
 
 {-# INLINEABLE verifyPartySignature #-}
-verifyPartySignature :: (CurrencySymbol, SnapshotVersion, SnapshotNumber, Hash, Hash, Hash) -> BuiltinByteString -> Signature -> Bool
+verifyPartySignature
+  :: (CurrencySymbol, SnapshotVersion, SnapshotNumber, Hash, Hash, Hash)
+  -> BuiltinByteString
+  -> Signature
+  -> Bool
 verifyPartySignature (headId, snapshotVersion, snapshotNumber, utxoHash, utxoToCommitHash, utxoToDecommitHash) partyVkey =
   verifyEd25519Signature partyVkey message
  where
@@ -313,7 +321,10 @@ verifyPartySignature (headId, snapshotVersion, snapshotNumber, utxoHash, utxoToC
 {-# INLINEABLE checkIncrement #-}
 checkIncrement :: TxOutRef -> TxInfo -> OpenDatum -> IncrementRedeemer -> Bool
 checkIncrement ownRef txInfo openBefore redeemer =
-  mustNotChangeParameters (prevParties, nextParties) (prevCperiod, nextCperiod) (prevHeadId, nextHeadId)
+  mustNotChangeParameters
+    (prevParties, nextParties)
+    (prevCperiod, nextCperiod)
+    (prevHeadId, nextHeadId)
     && mustIncreaseVersion
     && mustIncreaseValue
     && mustBeSignedByParticipant signatories inputs prevHeadId
@@ -344,7 +355,10 @@ checkIncrement ownRef txInfo openBefore redeemer =
     listElem (incrementRef redeemer) (txInInfoOutRef <$> inputs)
 
   checkSnapshotSignature =
-    verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, depositHash, emptyHash) sig
+    verifySnapshotSignature
+      nextParties
+      (nextHeadId, prevVersion, sn, nextUtxoHash, depositHash, emptyHash)
+      sig
 
   mustIncreaseVersion =
     nextVersion
@@ -356,8 +370,19 @@ checkIncrement ownRef txInfo openBefore redeemer =
       <> depositValue
       == headOutValue
 
-  OpenDatum{openParties = prevParties, openContestationPeriod = prevCperiod, openHeadId = prevHeadId, openVersion = prevVersion} = openBefore
-  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum outputs ownRef inputs
+  OpenDatum
+    { openParties = prevParties
+    , openContestationPeriod = prevCperiod
+    , openHeadId = prevHeadId
+    , openVersion = prevVersion
+    } = openBefore
+  OpenDatum
+    { openUtxoHash = nextUtxoHash
+    , openParties = nextParties
+    , openContestationPeriod = nextCperiod
+    , openHeadId = nextHeadId
+    , openVersion = nextVersion
+    } = decodeHeadOutputOpenDatum outputs ownRef inputs
 
 -- ============================================================================
 -- 9. checkDecrement
@@ -366,7 +391,10 @@ checkIncrement ownRef txInfo openBefore redeemer =
 {-# INLINEABLE checkDecrement #-}
 checkDecrement :: TxOutRef -> TxInfo -> OpenDatum -> DecrementRedeemer -> Bool
 checkDecrement ownRef txInfo openBefore redeemer =
-  mustNotChangeParameters (prevParties, nextParties) (prevCperiod, nextCperiod) (prevHeadId, nextHeadId)
+  mustNotChangeParameters
+    (prevParties, nextParties)
+    (prevCperiod, nextCperiod)
+    (prevHeadId, nextHeadId)
     && mustIncreaseVersion
     && checkSnapshotSignature
     && mustDecreaseValue
@@ -375,7 +403,10 @@ checkDecrement ownRef txInfo openBefore redeemer =
   TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoSignatories = signatories} = txInfo
 
   checkSnapshotSignature =
-    verifySnapshotSignature nextParties (nextHeadId, prevVersion, sn, nextUtxoHash, emptyHash, decommitUtxoHash) sig
+    verifySnapshotSignature
+      nextParties
+      (nextHeadId, prevVersion, sn, nextUtxoHash, emptyHash, decommitUtxoHash)
+      sig
 
   mustDecreaseValue =
     headInValue
@@ -389,10 +420,25 @@ checkDecrement ownRef txInfo openBefore redeemer =
 
   decommitUtxoHash = hashTxOuts decommitOutputs
 
-  DecrementRedeemer{decrementSig = sig, decrementSnapshotNumber = sn, decrementNumberOfDecommitOutputs = numDecommit} = redeemer
+  DecrementRedeemer
+    { decrementSig = sig
+    , decrementSnapshotNumber = sn
+    , decrementNumberOfDecommitOutputs = numDecommit
+    } = redeemer
 
-  OpenDatum{openParties = prevParties, openContestationPeriod = prevCperiod, openHeadId = prevHeadId, openVersion = prevVersion} = openBefore
-  OpenDatum{openUtxoHash = nextUtxoHash, openParties = nextParties, openContestationPeriod = nextCperiod, openHeadId = nextHeadId, openVersion = nextVersion} = decodeHeadOutputOpenDatum outputs ownRef inputs
+  OpenDatum
+    { openParties = prevParties
+    , openContestationPeriod = prevCperiod
+    , openHeadId = prevHeadId
+    , openVersion = prevVersion
+    } = openBefore
+  OpenDatum
+    { openUtxoHash = nextUtxoHash
+    , openParties = nextParties
+    , openContestationPeriod = nextCperiod
+    , openHeadId = nextHeadId
+    , openVersion = nextVersion
+    } = decodeHeadOutputOpenDatum outputs ownRef inputs
 
   headOutValue = txOutValue $ listHead outputs
   headInValue = case findOwnInput ownRef inputs of
@@ -416,11 +462,26 @@ checkClose ownRef txInfo openBefore redeemer =
     && mustBeValidSnapshot
     && mustInitializeContesters
     && mustPreserveHeadValue outputs ownRef inputs
-    && mustNotChangeParameters (closedParties closedOut, openParties openBefore) (closedContestationPeriod closedOut, openContestationPeriod openBefore) (closedHeadId closedOut, headId)
+    && mustNotChangeParameters
+      (closedParties closedOut, openParties openBefore)
+      (closedContestationPeriod closedOut, openContestationPeriod openBefore)
+      (closedHeadId closedOut, headId)
  where
-  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoMint = mint, txInfoSignatories = signatories} = txInfo
+  TxInfo
+    { txInfoInputs = inputs
+    , txInfoOutputs = outputs
+    , txInfoValidRange = validRange
+    , txInfoMint = mint
+    , txInfoSignatories = signatories
+    } = txInfo
 
-  OpenDatum{openParties = parties, openUtxoHash = initialUtxoHash, openContestationPeriod = cperiod, openHeadId = headId, openVersion = version} = openBefore
+  OpenDatum
+    { openParties = parties
+    , openUtxoHash = initialUtxoHash
+    , openContestationPeriod = cperiod
+    , openHeadId = headId
+    , openVersion = version
+    } = openBefore
 
   closedOut = decodeHeadOutputClosedDatum outputs ownRef inputs
 
@@ -449,31 +510,70 @@ checkClose ownRef txInfo openBefore redeemer =
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash)
+            sig
       CloseUnusedDec{closeUnusedDecSig = sig} ->
         closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           /= emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, closedOmegaUTxOHash closedOut) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , emptyHash
+            , closedOmegaUTxOHash closedOut
+            )
+            sig
       CloseUsedDec{closeUsedDecSig = sig, closeUsedDecAlreadyDecommitted = alreadyDecommitted} ->
         closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, alreadyDecommitted) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version - 1
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , emptyHash
+            , alreadyDecommitted
+            )
+            sig
       CloseUnusedInc{closeUnusedIncSig = sig, closeUnusedIncAlreadyCommitted = alreadyCommitted} ->
         closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , alreadyCommitted
+            , emptyHash
+            )
+            sig
       CloseUsedInc{closeUsedIncSig = sig, closeUsedIncAlreadyCommitted = alreadyCommitted} ->
         closedAlphaUTxOHash closedOut
           == alreadyCommitted
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version - 1
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , alreadyCommitted
+            , emptyHash
+            )
+            sig
 
   checkDeadline =
     closedContestationDeadline closedOut
@@ -506,10 +606,19 @@ checkContest ownRef txInfo closedDatum redeemer =
     && mustBeWithinContestationPeriod
     && mustUpdateContesters
     && mustPushDeadline
-    && mustNotChangeParameters (closedParties closedOut, closedParties closedDatum) (closedContestationPeriod closedOut, closedContestationPeriod closedDatum) (closedHeadId closedOut, headId)
+    && mustNotChangeParameters
+      (closedParties closedOut, closedParties closedDatum)
+      (closedContestationPeriod closedOut, closedContestationPeriod closedDatum)
+      (closedHeadId closedOut, headId)
     && mustPreserveHeadValue outputs ownRef inputs
  where
-  TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoValidRange = validRange, txInfoMint = mint, txInfoSignatories = signatories} = txInfo
+  TxInfo
+    { txInfoInputs = inputs
+    , txInfoOutputs = outputs
+    , txInfoValidRange = validRange
+    , txInfoMint = mint
+    , txInfoSignatories = signatories
+    } = txInfo
   closedOut = decodeHeadOutputClosedDatum outputs ownRef inputs
   headId = closedHeadId closedDatum
   parties = closedParties closedDatum
@@ -534,25 +643,64 @@ checkContest ownRef txInfo closedDatum redeemer =
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, emptyHash)
+            sig
       ContestUsedDec{contestUsedDecSig = sig, contestUsedDecAlreadyDecommitted = alreadyDecommitted} ->
         closedAlphaUTxOHash closedOut
           == emptyHash
           && closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, alreadyDecommitted) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version - 1
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , emptyHash
+            , alreadyDecommitted
+            )
+            sig
       ContestUnusedDec{contestUnusedDecSig = sig} ->
         closedAlphaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, emptyHash, closedOmegaUTxOHash closedOut) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , emptyHash
+            , closedOmegaUTxOHash closedOut
+            )
+            sig
       ContestUnusedInc{contestUnusedIncSig = sig, contestUnusedIncAlreadyCommitted = alreadyCommitted} ->
         closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version - 1, closedSnapshotNumber closedOut, closedUtxoHash closedOut, alreadyCommitted, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version - 1
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , alreadyCommitted
+            , emptyHash
+            )
+            sig
       ContestUsedInc{contestUsedIncSig = sig} ->
         closedOmegaUTxOHash closedOut
           == emptyHash
-          && verifySnapshotSignature parties (headId, version, closedSnapshotNumber closedOut, closedUtxoHash closedOut, closedAlphaUTxOHash closedOut, emptyHash) sig
+          && verifySnapshotSignature
+            parties
+            ( headId
+            , version
+            , closedSnapshotNumber closedOut
+            , closedUtxoHash closedOut
+            , closedAlphaUTxOHash closedOut
+            , emptyHash
+            )
+            sig
 
   mustBeWithinContestationPeriod =
     case ivTo validRange of
@@ -636,8 +784,15 @@ headValidator oldState input ownRef txInfo =
     (Open openDatum, Decrement red) -> checkDecrement ownRef txInfo openDatum red
     (Open openDatum, Close red) -> checkClose ownRef txInfo openDatum red
     (Closed closedDatum, Contest red) -> checkContest ownRef txInfo closedDatum red
-    (Closed closedDatum, Fanout{fanoutNumberOfFanoutOutputs, fanoutNumberOfCommitOutputs, fanoutNumberOfDecommitOutputs}) ->
-      headIsFinalizedWith txInfo closedDatum fanoutNumberOfFanoutOutputs fanoutNumberOfCommitOutputs fanoutNumberOfDecommitOutputs
+    ( Closed closedDatum
+      , Fanout{fanoutNumberOfFanoutOutputs, fanoutNumberOfCommitOutputs, fanoutNumberOfDecommitOutputs}
+      ) ->
+        headIsFinalizedWith
+          txInfo
+          closedDatum
+          fanoutNumberOfFanoutOutputs
+          fanoutNumberOfCommitOutputs
+          fanoutNumberOfDecommitOutputs
     _ -> error ()
 
 -- ============================================================================
@@ -648,7 +803,11 @@ headValidator oldState input ownRef txInfo =
 mkHeadValidator :: BuiltinData -> ()
 mkHeadValidator ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+      ScriptContext
+        { scriptContextTxInfo = txInfo
+        , scriptContextRedeemer = redeemer
+        , scriptContextScriptInfo = scriptInfo
+        } = ctx
    in case scriptInfo of
         SpendingScript ownRef (Just (Datum datumData)) ->
           let state = unsafeFromBuiltinData @State datumData

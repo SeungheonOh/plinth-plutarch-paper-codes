@@ -51,7 +51,8 @@ pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
          in go # txInputs
       _ -> perror
 
-pgetInputsByAddress :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PAddress :--> PBuiltinList (PAsData PTxInInfo))
+pgetInputsByAddress
+  :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PAddress :--> PBuiltinList (PAsData PTxInInfo))
 pgetInputsByAddress = phoistAcyclic $ pfix #$ plam $ \self inputs addr ->
   pelimList
     ( \inp rest ->
@@ -65,7 +66,8 @@ pgetInputsByAddress = phoistAcyclic $ pfix #$ plam $ \self inputs addr ->
     pnil
     inputs
 
-pgetOutputsByAddress :: Term s (PBuiltinList (PAsData PTxOut) :--> PAddress :--> PBuiltinList (PAsData PTxOut))
+pgetOutputsByAddress
+  :: Term s (PBuiltinList (PAsData PTxOut) :--> PAddress :--> PBuiltinList (PAsData PTxOut))
 pgetOutputsByAddress = phoistAcyclic $ pfix #$ plam $ \self outputs addr ->
   pelimList
     ( \out rest ->
@@ -197,39 +199,46 @@ pcheckDonate = phoistAcyclic $ plam $ \datum txInfo contractOutputs contractAmou
       ( \contractOutput ->
           plet (pgetOutputDatum # contractOutput) $ \outputDatum ->
             pmatch datum $ \(PCrowdfundDatum{pcfRecipient, pcfGoal, pcfDeadline, pcfWallets}) ->
-              pmatch outputDatum $ \(PCrowdfundDatum{pcfRecipient = outRecipient, pcfGoal = outGoal, pcfDeadline = outDeadline, pcfWallets = outWallets}) ->
-                let inputWallets = pfromData pcfWallets
-                    outputWallets = pfromData outWallets
-                    validRange = pmatch txInfo $ \txI -> ptxInfo'validRange txI
-                    deadline = pfromData pcfDeadline
-                    walletsUnchanged =
-                      pdata (pfilterOutKey # donor # inputWallets)
-                        #== pdata (pfilterOutKey # donor # outputWallets)
-                    donorAmountCorrect =
-                      pmatch (plookup # donor # outputWallets) $ \case
-                        PJust outputWalletAmount ->
-                          pmatch (plookup # donor # inputWallets) $ \case
-                            PNothing -> amount #== outputWalletAmount
-                            PJust previousAmount -> outputWalletAmount #== previousAmount + amount
-                        PNothing -> pconstant False
-                 in pmustStartBeforeTimeout
-                      # validRange
-                      # deadline
-                      #&& pmustBeSignedBy
-                      # txInfo
-                      # donor
-                      #&& pgetAdaFromOutputs
-                      # contractOutputs
-                      #== contractAmount
-                      + amount
-                        #&& outRecipient
-                        #== pcfRecipient
-                        #&& outGoal
-                        #== pcfGoal
-                        #&& outDeadline
-                        #== pcfDeadline
-                        #&& walletsUnchanged
-                        #&& donorAmountCorrect
+              pmatch outputDatum $
+                \( PCrowdfundDatum
+                     { pcfRecipient = outRecipient
+                     , pcfGoal = outGoal
+                     , pcfDeadline = outDeadline
+                     , pcfWallets = outWallets
+                     }
+                   ) ->
+                    let inputWallets = pfromData pcfWallets
+                        outputWallets = pfromData outWallets
+                        validRange = pmatch txInfo $ \txI -> ptxInfo'validRange txI
+                        deadline = pfromData pcfDeadline
+                        walletsUnchanged =
+                          pdata (pfilterOutKey # donor # inputWallets)
+                            #== pdata (pfilterOutKey # donor # outputWallets)
+                        donorAmountCorrect =
+                          pmatch (plookup # donor # outputWallets) $ \case
+                            PJust outputWalletAmount ->
+                              pmatch (plookup # donor # inputWallets) $ \case
+                                PNothing -> amount #== outputWalletAmount
+                                PJust previousAmount -> outputWalletAmount #== previousAmount + amount
+                            PNothing -> pconstant False
+                     in pmustStartBeforeTimeout
+                          # validRange
+                          # deadline
+                          #&& pmustBeSignedBy
+                          # txInfo
+                          # donor
+                          #&& pgetAdaFromOutputs
+                          # contractOutputs
+                          #== contractAmount
+                          + amount
+                            #&& outRecipient
+                            #== pcfRecipient
+                            #&& outGoal
+                            #== pcfGoal
+                            #&& outDeadline
+                            #== pcfDeadline
+                            #&& walletsUnchanged
+                            #&& donorAmountCorrect
       )
 
 -- ============================================================================
@@ -284,17 +293,24 @@ pcheckReclaim = phoistAcyclic $ plam $ \datum txInfo contractInputs contractOutp
                       (pfromData (phead # contractOutputs))
                       ( \contractOutput ->
                           plet (pgetOutputDatum # contractOutput) $ \outputDatum ->
-                            pmatch outputDatum $ \(PCrowdfundDatum{pcfRecipient = outRecipient, pcfGoal = outGoal, pcfDeadline = outDeadline, pcfWallets = outWallets}) ->
-                              pgetAdaFromOutputs # contractOutputs #== pgetAdaFromInputs # contractInputs
-                                - withdrawAmount
-                                  #&& outRecipient
-                                  #== pcfRecipient
-                                  #&& outGoal
-                                  #== pcfGoal
-                                  #&& outDeadline
-                                  #== pcfDeadline
-                                  #&& outWallets
-                                  #== pdata (pfilterOutKey # currentSigner # wallets)
+                            pmatch outputDatum $
+                              \( PCrowdfundDatum
+                                   { pcfRecipient = outRecipient
+                                   , pcfGoal = outGoal
+                                   , pcfDeadline = outDeadline
+                                   , pcfWallets = outWallets
+                                   }
+                                 ) ->
+                                  pgetAdaFromOutputs # contractOutputs #== pgetAdaFromInputs # contractInputs
+                                    - withdrawAmount
+                                      #&& outRecipient
+                                      #== pcfRecipient
+                                      #&& outGoal
+                                      #== pcfGoal
+                                      #&& outDeadline
+                                      #== pcfDeadline
+                                      #&& outWallets
+                                      #== pdata (pfilterOutKey # currentSigner # wallets)
                       )
                 )
                 (plistLength # contractOutputs #== 0)
@@ -303,7 +319,8 @@ pcheckReclaim = phoistAcyclic $ plam $ \datum txInfo contractInputs contractOutp
 -- 6. Main validator
 -- ============================================================================
 
-pcrowdfundValidator :: Term s (PScriptContext :--> PCrowdfundDatum :--> PCrowdfundRedeemer :--> PUnit)
+pcrowdfundValidator
+  :: Term s (PScriptContext :--> PCrowdfundDatum :--> PCrowdfundRedeemer :--> PUnit)
 pcrowdfundValidator = phoistAcyclic $ plam $ \ctx datum redeemer ->
   pmatch ctx $ \(PScriptContext{pscriptContext'txInfo}) ->
     let txInfo = pscriptContext'txInfo
@@ -324,7 +341,13 @@ pcrowdfundValidator = phoistAcyclic $ plam $ \ctx datum redeemer ->
                   redeemer
                   ( \case
                       PDonate{pdonateAmount, pdonateDonor} ->
-                        pcheckDonate # datum # txInfo # contractOutputs # contractAmount # pfromData pdonateAmount # pfromData pdonateDonor
+                        pcheckDonate
+                          # datum
+                          # txInfo
+                          # contractOutputs
+                          # contractAmount
+                          # pfromData pdonateAmount
+                          # pfromData pdonateDonor
                       PWithdraw ->
                         pcheckWithdraw # datum # txInfo # contractAmount
                       PReclaim ->

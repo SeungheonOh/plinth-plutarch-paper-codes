@@ -83,7 +83,9 @@ main =
           "Constitution Sorted Validator"
           [ ConstitutionSorted.mkConstitutionTests "Plutarch" plutarchConstitutionScript
           , ConstitutionSorted.mkConstitutionTests "Plinth (PlutusTx)" plinthConstitutionScript
-          , ConstitutionSorted.mkConstitutionConformanceTests plutarchConstitutionScript plinthConstitutionScript
+          , ConstitutionSorted.mkConstitutionConformanceTests
+              plutarchConstitutionScript
+              plinthConstitutionScript
           ]
       , testGroup
           "Crowdfund Validator"

@@ -109,7 +109,11 @@ biTokenUnion xs ys =
           xb = BI.unsafeDataAsB xk
           yb = BI.unsafeDataAsB yk
        in if Builtins.equalsByteString xb yb
-            then consPair xk (BI.mkI (BI.unsafeDataAsI (BI.snd xh) + BI.unsafeDataAsI (BI.snd yh))) (biTokenUnion xr yr)
+            then
+              consPair
+                xk
+                (BI.mkI (BI.unsafeDataAsI (BI.snd xh) + BI.unsafeDataAsI (BI.snd yh)))
+                (biTokenUnion xr yr)
             else
               if Builtins.lessThanByteString xb yb
                 then BI.mkCons xh (biTokenUnion xr ys)
@@ -125,7 +129,11 @@ biCurrencyUnion xs ys =
           xb = BI.unsafeDataAsB xk
           yb = BI.unsafeDataAsB yk
        in if Builtins.equalsByteString xb yb
-            then consPair xk (BI.mkMap (biTokenUnion (BI.unsafeDataAsMap (BI.snd xh)) (BI.unsafeDataAsMap (BI.snd yh)))) (biCurrencyUnion xr yr)
+            then
+              consPair
+                xk
+                (BI.mkMap (biTokenUnion (BI.unsafeDataAsMap (BI.snd xh)) (BI.unsafeDataAsMap (BI.snd yh))))
+                (biCurrencyUnion xr yr)
             else
               if Builtins.lessThanByteString xb yb
                 then BI.mkCons xh (biCurrencyUnion xr ys)
@@ -133,7 +141,11 @@ biCurrencyUnion xs ys =
 
 {-# INLINEABLE valueUnion #-}
 valueUnion :: Value -> Value -> Value
-valueUnion a b = Value (DMap.unsafeFromBuiltinList (biCurrencyUnion (DMap.toBuiltinList (getValue a)) (DMap.toBuiltinList (getValue b))))
+valueUnion a b =
+  Value
+    ( DMap.unsafeFromBuiltinList
+        (biCurrencyUnion (DMap.toBuiltinList (getValue a)) (DMap.toBuiltinList (getValue b)))
+    )
 
 {-# INLINEABLE biNegateTokens #-}
 biNegateTokens :: BIPairs -> BIPairs
@@ -368,7 +380,10 @@ checkTransferLogicAndGetProgrammableValue
   -> Value
 checkTransferLogicAndGetProgrammableValue directoryNodeCS refInputs proofList wdrl initialCachedTransferScript totalValue =
   let inputCsPairs = DMap.toBuiltinList (getValue totalValue)
-   in Value (DMap.unsafeFromBuiltinList (biReversePairs (go proofList inputCsPairs nilPairs initialCachedTransferScript)))
+   in Value
+        ( DMap.unsafeFromBuiltinList
+            (biReversePairs (go proofList inputCsPairs nilPairs initialCachedTransferScript))
+        )
  where
   go :: DList.List Integer -> BIPairs -> BIPairs -> Credential -> BIPairs
   go proofs csPairs acc cachedTransferScript =
@@ -525,13 +540,23 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
 
   checkCorrespondingPair :: TxOut -> DList.List Integer -> BIList -> BIList -> BIPairs -> Bool
   checkCorrespondingPair inputTxOut remainingIdxs remainingInputsAfterIdx programmableOutputs deltaAccumulator =
-    let TxOut{txOutAddress = inputAddr, txOutValue = inputVal, txOutDatum = inputDat, txOutReferenceScript = inputRefScript} = inputTxOut
+    let TxOut
+          { txOutAddress = inputAddr
+          , txOutValue = inputVal
+          , txOutDatum = inputDat
+          , txOutReferenceScript = inputRefScript
+          } = inputTxOut
         Address inputCred _ = inputAddr
      in if toBuiltinData inputCred == progLogicCredData
           then
             BI.unsafeCaseList
               ( \outputTxOutData outputsRest ->
-                  let TxOut{txOutAddress = outputAddr, txOutValue = outputVal, txOutDatum = outputDat, txOutReferenceScript = outputRefScript} = unsafeFromBuiltinData outputTxOutData
+                  let TxOut
+                        { txOutAddress = outputAddr
+                        , txOutValue = outputVal
+                        , txOutDatum = outputDat
+                        , txOutReferenceScript = outputRefScript
+                        } = unsafeFromBuiltinData outputTxOutData
                    in if inputAddr == outputAddr && inputDat == outputDat && inputRefScript == outputRefScript
                         then
                           let delta = valueEqualsDeltaCurrencySymbol programmableCS inputVal outputVal
@@ -549,7 +574,10 @@ processThirdPartyTransfer programmableCS progLogicCred inputs progOutputs inputI
       let TxOut{txOutAddress = addr, txOutValue = val} = unsafeFromBuiltinData txOutData
           Address paymentCred _ = addr
        in if toBuiltinData paymentCred == progLogicCredData
-            then biTokenUnion (withCurrencySymbol programmableCS val nilPairs DMap.toBuiltinList) (accumulateProgOutputTokens rest)
+            then
+              biTokenUnion
+                (withCurrencySymbol programmableCS val nilPairs DMap.toBuiltinList)
+                (accumulateProgOutputTokens rest)
             else accumulateProgOutputTokens rest
 
 {-# INLINEABLE enforceNSpendRedeemers #-}

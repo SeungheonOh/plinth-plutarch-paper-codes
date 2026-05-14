@@ -147,7 +147,11 @@ analyzeFile path = do
           headMetrics = case mhead of
             Just (HSE.ModuleHead l _ _ _) -> addToMap SModuleHead (declLines l) pragmaMetrics
             Nothing -> pragmaMetrics
-          importMetrics = foldl' (\acc (ImportDecl l _ _ _ _ _ _ _) -> addToMap SImports (declLines l) acc) headMetrics importList
+          importMetrics =
+            foldl'
+              (\acc (ImportDecl l _ _ _ _ _ _ _) -> addToMap SImports (declLines l) acc)
+              headMetrics
+              importList
           declMetrics = foldl' (\acc d -> addToMap (classifyDecl d) (declDeclLines d) acc) importMetrics decls
           commentMetrics = foldl' (\acc c -> addToMap (classifyComment c) (commentLns c) acc) declMetrics comments
           topBinds = countTopBindings decls

@@ -28,14 +28,14 @@ Toolchain: Plinth `1.64.0.0`, Plutarch `1.12.0`, GHC `9.6.6`. All ratios are **P
 
 | Validator      | Plutarch eLOC | Plinth eLOC | eLOC ratio | Plutarch Size (Bytes) | Plinth Size | Size ratio |
 |----------------|--------------:|------------:|-----------:|------------------:|----------------:|-----------:|
-| Smart Tokens   |           874 |         549 |      0.63x |              4080 |            3902 |      0.96x |
+| Smart Tokens   |           985 |         577 |      0.59x |              4080 |            3902 |      0.96x |
 | Guardrail      |           202 |          89 |      0.44x |               769 |             798 |      1.04x |
-| Crowdfund      |           282 |         188 |      0.67x |              1888 |            2203 |      1.17x |
-| Vesting        |           208 |         114 |      0.55x |              1502 |            1187 |      0.79x |
-| SundaeSwap NFT |           327 |         208 |      0.64x |              2162 |            2475 |      1.14x |
+| Crowdfund      |           303 |         211 |      0.70x |              1888 |            2203 |      1.17x |
+| Vesting        |           199 |         155 |      0.78x |              1219 |            1184 |      0.97x |
+| SundaeSwap NFT |           345 |         220 |      0.64x |              2162 |            2475 |      1.14x |
 | Certifying     |            52 |          36 |      0.69x |               317 |             381 |      1.20x |
 | Voting         |            55 |          58 |      1.05x |               272 |             244 |      0.90x |
-| **Total**      |      **2000** |    **1242** |  **0.62x** |         **10990** |       **11190** |  **1.02x** |
+| **Total**      |      **2141** |    **1346** |  **0.63x** |         **10707** |       **11187** |  **1.04x** |
 
 ### Source Program Jargon Level
 
@@ -45,16 +45,16 @@ The two curated lists are designed to be symmetric. Plutarch's term primitives (
 
 | Validator      | Plutarch Jargon | Plinth Jargon | Jargon ratio | Plutarch /eLOC | Plinth /eLOC |
 |----------------|----------------:|--------------:|-------------:|---------------:|-------------:|
-| Smart Tokens   |            1724 |           350 |        0.20x |           1.97 |         0.64 |
-| Guardrail      |             266 |            59 |        0.22x |           1.32 |         0.66 |
-| Crowdfund      |             491 |           112 |        0.23x |           1.74 |         0.60 |
-| Vesting        |             407 |            71 |        0.17x |           1.96 |         0.62 |
-| SundaeSwap NFT |             576 |           106 |        0.18x |           1.76 |         0.51 |
+| Smart Tokens   |            1724 |           350 |        0.20x |           1.75 |         0.61 |
+| Guardrail      |             266 |            44 |        0.17x |           1.32 |         0.49 |
+| Crowdfund      |             491 |           112 |        0.23x |           1.62 |         0.53 |
+| Vesting        |             295 |            89 |        0.30x |           1.48 |         0.57 |
+| SundaeSwap NFT |             576 |           106 |        0.18x |           1.67 |         0.48 |
 | Certifying     |             112 |            22 |        0.20x |           2.15 |         0.61 |
-| Voting         |             156 |            47 |        0.30x |           2.84 |         0.81 |
-| **Total**      |        **3732** |       **767** |    **0.21x** |       **1.87** |     **0.62** |
+| Voting         |             156 |            46 |        0.29x |           2.84 |         0.79 |
+| **Total**      |        **3620** |       **769** |    **0.21x** |       **1.69** |     **0.57** |
 
-The aggregate Plutarch program emits roughly three times as many jargon tokens per effective line of code as the aggregate Plinth program (1.87 vs 0.62), and 4.9 times the raw absolute count (3,732 vs 767) once the eLOC difference is folded in. The gap is consistent across every validator in the suite: Plutarch's per-eLOC density ranges from 1.32 to 2.84, Plinth's from 0.51 to 0.81. Voting is the only pair where Plinth's eLOC slightly exceeds Plutarch's, yet Plinth's jargon density there (0.81) is still less than a third of Plutarch's (2.84).
+The aggregate Plutarch program emits roughly three times as many jargon tokens per effective line of code as the aggregate Plinth program (1.69 vs 0.57), and 4.7 times the raw absolute count (3,620 vs 769) once the eLOC difference is folded in. The gap is consistent across every validator in the suite: Plutarch's per-eLOC density ranges from 1.32 to 2.84, Plinth's from 0.48 to 0.79. Voting is the only pair where Plinth's eLOC slightly exceeds Plutarch's, yet Plinth's jargon density there (0.79) is still less than a third of Plutarch's (2.84).
 
 ### Execution Cost &mdash; Per-Scenario
 
@@ -100,17 +100,17 @@ Rejecting cases and some property based test cases are still exercised by the te
 
 | Scenario | Plutarch CPU | Plutarch Mem | Plinth CPU | Plinth Mem | CPU ratio | Mem ratio |
 |---|---:|---:|---:|---:|---:|---:|
-| full withdrawal after vesting | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
-| partial withdrawal midpoint | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
-| second partial withdrawal | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
-| full withdrawal at end | 63,364,345 | 171,064 | 42,897,827 | 127,944 | 0.68x | 0.75x |
-| small withdrawal early | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
-| third partial drains | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
-| odd division partial | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
-| multi beneficiary outputs | 68,719,539 | 187,321 | 48,605,874 | 146,573 | 0.71x | 0.78x |
-| zero fee | 62,847,843 | 169,859 | 42,381,325 | 126,739 | 0.67x | 0.75x |
-| quarter vested | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
-| ninety percent | 127,425,710 | 331,016 | 65,712,769 | 190,710 | 0.52x | 0.58x |
+| full withdrawal after vesting | 38,909,388 | 112,264 | 35,340,687 | 101,467 | 0.91x | 0.90x |
+| partial withdrawal midpoint | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
+| second partial withdrawal | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
+| full withdrawal at end | 39,425,890 | 113,469 | 35,857,189 | 102,672 | 0.91x | 0.90x |
+| small withdrawal early | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
+| third partial drains | 38,909,388 | 112,264 | 35,340,687 | 101,467 | 0.91x | 0.90x |
+| odd division partial | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
+| multi beneficiary outputs | 43,484,191 | 126,070 | 39,313,502 | 113,109 | 0.90x | 0.90x |
+| zero fee | 38,909,388 | 112,264 | 35,340,687 | 101,467 | 0.91x | 0.90x |
+| quarter vested | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
+| ninety percent | 66,088,455 | 183,674 | 56,291,830 | 157,014 | 0.85x | 0.85x |
 
 #### SundaeSwap NFT (Settings)
 

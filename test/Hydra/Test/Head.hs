@@ -135,7 +135,12 @@ mkFanoutCtx :: ScriptContext
 mkFanoutCtx =
   let closedDatum = mkClosedDatumForFanout 1000
       state = Closed closedDatum
-      fanoutRedeemer = Fanout{fanoutNumberOfFanoutOutputs = 1, fanoutNumberOfCommitOutputs = 0, fanoutNumberOfDecommitOutputs = 0}
+      fanoutRedeemer =
+        Fanout
+          { fanoutNumberOfFanoutOutputs = 1
+          , fanoutNumberOfCommitOutputs = 0
+          , fanoutNumberOfDecommitOutputs = 0
+          }
    in buildBalancedScriptContext
         ( withSpendingScript
             (PlutusTx.toBuiltinData fanoutRedeemer)
@@ -161,7 +166,12 @@ mkFanoutHashMismatchCtx :: ScriptContext
 mkFanoutHashMismatchCtx =
   let closedDatum = mkClosedDatumForFanout 1000
       state = Closed closedDatum
-      fanoutRedeemer = Fanout{fanoutNumberOfFanoutOutputs = 1, fanoutNumberOfCommitOutputs = 0, fanoutNumberOfDecommitOutputs = 0}
+      fanoutRedeemer =
+        Fanout
+          { fanoutNumberOfFanoutOutputs = 1
+          , fanoutNumberOfCommitOutputs = 0
+          , fanoutNumberOfDecommitOutputs = 0
+          }
    in buildBalancedScriptContext
         ( withSpendingScript
             (PlutusTx.toBuiltinData fanoutRedeemer)
@@ -187,7 +197,12 @@ mkFanoutBeforeDeadlineCtx :: ScriptContext
 mkFanoutBeforeDeadlineCtx =
   let closedDatum = mkClosedDatumForFanout 1000
       state = Closed closedDatum
-      fanoutRedeemer = Fanout{fanoutNumberOfFanoutOutputs = 1, fanoutNumberOfCommitOutputs = 0, fanoutNumberOfDecommitOutputs = 0}
+      fanoutRedeemer =
+        Fanout
+          { fanoutNumberOfFanoutOutputs = 1
+          , fanoutNumberOfCommitOutputs = 0
+          , fanoutNumberOfDecommitOutputs = 0
+          }
    in buildBalancedScriptContext
         ( withSpendingScript
             (PlutusTx.toBuiltinData fanoutRedeemer)
@@ -213,7 +228,12 @@ mkFanoutBurnMismatchCtx :: ScriptContext
 mkFanoutBurnMismatchCtx =
   let closedDatum = mkClosedDatumForFanout 1000
       state = Closed closedDatum
-      fanoutRedeemer = Fanout{fanoutNumberOfFanoutOutputs = 1, fanoutNumberOfCommitOutputs = 0, fanoutNumberOfDecommitOutputs = 0}
+      fanoutRedeemer =
+        Fanout
+          { fanoutNumberOfFanoutOutputs = 1
+          , fanoutNumberOfCommitOutputs = 0
+          , fanoutNumberOfDecommitOutputs = 0
+          }
    in buildBalancedScriptContext
         ( withSpendingScript
             (PlutusTx.toBuiltinData fanoutRedeemer)

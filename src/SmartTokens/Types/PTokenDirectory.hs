@@ -79,10 +79,16 @@ pemptyCSData :: Term s (PAsData PCurrencySymbol)
 pemptyCSData = unsafeEvalTerm NoTracing (punsafeCoerce (pconstant @PData $ B ""))
 
 ptailNextData :: Term s (PAsData PCurrencySymbol)
-ptailNextData = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+ptailNextData =
+  unsafeEvalTerm
+    NoTracing
+    (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
 
 ptailBlackListNext :: Term s (PAsData PByteString)
-ptailBlackListNext = unsafeEvalTerm NoTracing (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+ptailBlackListNext =
+  unsafeEvalTerm
+    NoTracing
+    (punsafeCoerce $ pdata (phexByteStr "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
 
 -- ============================================================================
 -- Plinth: BlacklistNode
@@ -116,25 +122,30 @@ deriving via
   instance
     PLiftable PBlacklistNode
 
-pmkBlacklistNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode)
+pmkBlacklistNode
+  :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode)
 pmkBlacklistNode = phoistAcyclic $
   plam $ \key_ next_ ->
     punsafeCoerce $ plistData # pmkBuiltinList [pforgetData key_, pforgetData next_]
 
-pisInsertedOnBlacklistNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode :--> PBool)
+pisInsertedOnBlacklistNode
+  :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode :--> PBool)
 pisInsertedOnBlacklistNode = phoistAcyclic $
   plam $ \insertedKey coveringKey outputNode ->
     let expectedDirectoryNode = pmkBlacklistNode # coveringKey # insertedKey
      in outputNode #== expectedDirectoryNode
 
-pisInsertedBlacklistNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode :--> PBool)
+pisInsertedBlacklistNode
+  :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PBlacklistNode :--> PBool)
 pisInsertedBlacklistNode = phoistAcyclic $
   plam $ \insertedKey coveringNext outputNode ->
     let expectedDirectoryNode = pmkBlacklistNode # insertedKey # coveringNext
      in outputNode #== expectedDirectoryNode
 
 pemptyBlacklistNode :: Term s (PAsData PBlacklistNode)
-pemptyBlacklistNode = punsafeCoerce $ plistData # pmkBuiltinList [pforgetData pemptyBSData, pforgetData ptailBlackListNext]
+pemptyBlacklistNode =
+  punsafeCoerce $
+    plistData # pmkBuiltinList [pforgetData pemptyBSData, pforgetData ptailBlackListNext]
 
 pisBlacklistTailNode :: Term s (PAsData PBlacklistNode) -> Term s PBool
 pisBlacklistTailNode node =
@@ -213,31 +224,72 @@ emptyNode :: Term s (PAsData PDirectorySetNode)
 emptyNode =
   let nullTransferLogicCred = pconstant (Constr 0 [B ""])
       nullIssuerLogicCred = pconstant (Constr 0 [B ""])
-   in punsafeCoerce $ plistData # pmkBuiltinList [pforgetData pemptyBSData, pforgetData ptailNextData, nullTransferLogicCred, nullIssuerLogicCred, pforgetData pemptyBSData]
+   in punsafeCoerce $
+        plistData
+          # pmkBuiltinList
+            [ pforgetData pemptyBSData
+            , pforgetData ptailNextData
+            , nullTransferLogicCred
+            , nullIssuerLogicCred
+            , pforgetData pemptyBSData
+            ]
 
 pisEmptyNode :: Term s (PAsData PDirectorySetNode) -> Term s PBool
 pisEmptyNode node =
   node #== emptyNode
 
-pmkDirectorySetNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PCredential :--> PAsData PCredential :--> PAsData PCurrencySymbol :--> PAsData PDirectorySetNode)
+pmkDirectorySetNode
+  :: Term
+       s
+       ( PAsData PByteString
+           :--> PAsData PByteString
+           :--> PAsData PCredential
+           :--> PAsData PCredential
+           :--> PAsData PCurrencySymbol
+           :--> PAsData PDirectorySetNode
+       )
 pmkDirectorySetNode = phoistAcyclic $
   plam $ \key_ next_ transferLogicCred issuerLogicCred globalStateCS_ ->
-    punsafeCoerce $ plistData # pmkBuiltinList [pforgetData key_, pforgetData next_, pforgetData transferLogicCred, pforgetData issuerLogicCred, pforgetData globalStateCS_]
+    punsafeCoerce $
+      plistData
+        # pmkBuiltinList
+          [ pforgetData key_
+          , pforgetData next_
+          , pforgetData transferLogicCred
+          , pforgetData issuerLogicCred
+          , pforgetData globalStateCS_
+          ]
 
-pisInsertedOnNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PCredential :--> PAsData PCredential :--> PAsData PCurrencySymbol :--> PAsData PDirectorySetNode :--> PBool)
+pisInsertedOnNode
+  :: Term
+       s
+       ( PAsData PByteString
+           :--> PAsData PByteString
+           :--> PAsData PCredential
+           :--> PAsData PCredential
+           :--> PAsData PCurrencySymbol
+           :--> PAsData PDirectorySetNode
+           :--> PBool
+       )
 pisInsertedOnNode = phoistAcyclic $
   plam $ \insertedKey coveringKey transferLogicCred issuerLogicCred globalCS outputNode ->
     let expectedDirectoryNode = pmkDirectorySetNode # coveringKey # insertedKey # transferLogicCred # issuerLogicCred # globalCS
      in outputNode #== expectedDirectoryNode
 
-pisInsertedNode :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PDirectorySetNode :--> PBool)
+pisInsertedNode
+  :: Term s (PAsData PByteString :--> PAsData PByteString :--> PAsData PDirectorySetNode :--> PBool)
 pisInsertedNode = phoistAcyclic $
   plam $ \insertedKey coveringNext outputNode ->
     pmatch (pfromData outputNode) $ \(PDirectorySetNode{ptransferLogicScript, pissuerLogicScript, pglobalStateCS}) ->
       let transferLogicCred_ = ptransferLogicScript
           issuerLogicCred_ = pissuerLogicScript
           expectedDirectoryNode =
-            pmkDirectorySetNode # insertedKey # coveringNext # pdeserializeDirectoryCredential transferLogicCred_ # pdeserializeDirectoryCredential issuerLogicCred_ # pdeserializeCurrencySymbol pglobalStateCS
+            pmkDirectorySetNode
+              # insertedKey
+              # coveringNext
+              # pdeserializeDirectoryCredential transferLogicCred_
+              # pdeserializeDirectoryCredential issuerLogicCred_
+              # pdeserializeCurrencySymbol pglobalStateCS
        in outputNode #== expectedDirectoryNode
 
 pdeserializeDirectoryCredential :: Term s (PAsData PCredential) -> Term s (PAsData PCredential)

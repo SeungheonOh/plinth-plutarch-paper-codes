@@ -17,7 +17,11 @@ import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (CurrencySymbol (..), TokenName (..))
 
-import Settings.Types.SettingsState (PMultisigScript (..), PSettingsDatum (..), PSettingsRedeemer (..))
+import Settings.Types.SettingsState (
+  PMultisigScript (..),
+  PSettingsDatum (..),
+  PSettingsRedeemer (..),
+ )
 
 -- ============================================================================
 -- 1. Infrastructure
@@ -37,28 +41,36 @@ plistElem = phoistAcyclic $ pfix #$ plam $ \self key xs ->
     (pconstant False)
     xs
 
-plistAll :: Term s ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PBool)
+plistAll
+  :: Term s ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PBool)
 plistAll = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
   pelimList
     (\x rest -> pif (pred' # x) (self # pred' # rest) (pconstant False))
     (pconstant True)
     xs
 
-plistAny :: Term s ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PBool)
+plistAny
+  :: Term s ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PBool)
 plistAny = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
   pelimList
     (\x rest -> pif (pred' # x) (pconstant True) (self # pred' # rest))
     (pconstant False)
     xs
 
-plistCount :: Term s ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PInteger)
+plistCount
+  :: Term
+       s
+       ((PAsData PMultisigScript :--> PBool) :--> PBuiltinList (PAsData PMultisigScript) :--> PInteger)
 plistCount = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
   pelimList
     (\x rest -> pif (pred' # x) (1 + self # pred' # rest) (self # pred' # rest))
     0
     xs
 
-ppairsHasKey :: Term s (PCredential :--> PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)) :--> PBool)
+ppairsHasKey
+  :: Term
+       s
+       (PCredential :--> PBuiltinList (PBuiltinPair (PAsData PCredential) (PAsData PLovelace)) :--> PBool)
 ppairsHasKey = phoistAcyclic $ pfix #$ plam $ \self key xs ->
   pelimList
     (\x rest -> pif (pfromData (pfstBuiltin # x) #== key) (pconstant True) (self # key # rest))
@@ -171,7 +183,8 @@ pvalueIsZero = phoistAcyclic $ plam $ \v ->
   let entries = pto (pto v)
    in pelimList (\_ _ -> pconstant False) (pconstant True) entries
 
-plistAnyInput :: Term s ((PAsData PTxInInfo :--> PBool) :--> PBuiltinList (PAsData PTxInInfo) :--> PBool)
+plistAnyInput
+  :: Term s ((PAsData PTxInInfo :--> PBool) :--> PBuiltinList (PAsData PTxInInfo) :--> PBool)
 plistAnyInput = phoistAcyclic $ pfix #$ plam $ \self pred' xs ->
   pelimList
     (\x rest -> pif (pred' # x) (pconstant True) (self # pred' # rest))
@@ -192,18 +205,24 @@ pcheckSettingsAdminUpdate
        )
 pcheckSettingsAdminUpdate = phoistAcyclic $ plam $ \inputDatum outputDatum txInfo ->
   pmatch inputDatum $ \(PSettingsDatum{psdSettingsAdmin, psdAuthorizedStakingKeys, psdTreasuryAddress, psdTreasuryAllowance}) ->
-    pmatch outputDatum $ \(PSettingsDatum{psdAuthorizedStakingKeys = outStakingKeys, psdTreasuryAddress = outTreasuryAddr, psdTreasuryAllowance = outTreasuryAllow}) ->
-      let signatories = pfromData $ pmatch txInfo $ \txI -> ptxInfo'signatories txI
-          validRange = pmatch txInfo $ \txI -> ptxInfo'validRange txI
-          withdrawals = pto $ pfromData $ pmatch txInfo $ \txI -> ptxInfo'wdrl txI
-          signedByAdmin = pmultisigSatisfied # pfromData psdSettingsAdmin # signatories # validRange # withdrawals
-          stakingKeysUnchanged = outStakingKeys #== psdAuthorizedStakingKeys
-          treasuryAddrUnchanged = outTreasuryAddr #== psdTreasuryAddress
-          treasuryAllowUnchanged = outTreasuryAllow #== psdTreasuryAllowance
-       in signedByAdmin
-            #&& stakingKeysUnchanged
-            #&& treasuryAddrUnchanged
-            #&& treasuryAllowUnchanged
+    pmatch outputDatum $
+      \( PSettingsDatum
+           { psdAuthorizedStakingKeys = outStakingKeys
+           , psdTreasuryAddress = outTreasuryAddr
+           , psdTreasuryAllowance = outTreasuryAllow
+           }
+         ) ->
+          let signatories = pfromData $ pmatch txInfo $ \txI -> ptxInfo'signatories txI
+              validRange = pmatch txInfo $ \txI -> ptxInfo'validRange txI
+              withdrawals = pto $ pfromData $ pmatch txInfo $ \txI -> ptxInfo'wdrl txI
+              signedByAdmin = pmultisigSatisfied # pfromData psdSettingsAdmin # signatories # validRange # withdrawals
+              stakingKeysUnchanged = outStakingKeys #== psdAuthorizedStakingKeys
+              treasuryAddrUnchanged = outTreasuryAddr #== psdTreasuryAddress
+              treasuryAllowUnchanged = outTreasuryAllow #== psdTreasuryAllowance
+           in signedByAdmin
+                #&& stakingKeysUnchanged
+                #&& treasuryAddrUnchanged
+                #&& treasuryAllowUnchanged
 
 -- ============================================================================
 -- 5. Treasury Admin Update
@@ -307,7 +326,8 @@ psettingsValidator = phoistAcyclic $ plam $ \ctx inputDatum redeemer ->
 -- 7. Mint validator
 -- ============================================================================
 
-pmintsExactlyOneToken :: Term s (PCurrencySymbol :--> PTokenName :--> PValue 'Sorted 'NonZero :--> PBool)
+pmintsExactlyOneToken
+  :: Term s (PCurrencySymbol :--> PTokenName :--> PValue 'Sorted 'NonZero :--> PBool)
 pmintsExactlyOneToken = phoistAcyclic $ plam $ \expectedCs expectedTn mintValue ->
   let mintEntries = pto (pto mintValue)
    in pelimList
@@ -362,7 +382,10 @@ pfindSettingsOutput = phoistAcyclic $ pfix #$ plam $ \self ownPolicyId outs ->
 psettingsMintValidator :: Term s (PTxOutRef :--> PCurrencySymbol :--> PTxInfo :--> PUnit)
 psettingsMintValidator = phoistAcyclic $ plam $ \bootUtxo ownPolicyId txInfo ->
   let mintsExactlyOne =
-        pmintsExactlyOneToken # ownPolicyId # pconstant (TokenName "settings") # pfromData (pmatch txInfo $ \txI -> ptxInfo'mint txI)
+        pmintsExactlyOneToken
+          # ownPolicyId
+          # pconstant (TokenName "settings")
+          # pfromData (pmatch txInfo $ \txI -> ptxInfo'mint txI)
       spendsBootUtxo =
         plistAnyInput
           # plam

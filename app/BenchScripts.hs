@@ -44,7 +44,9 @@ import SmartTokens.Contracts.ProgrammableLogicBasePlinth (plinthProgrammableLogi
 import SmartTokens.Types.Constants (protocolParamsToken)
 import SmartTokens.Types.PTokenDirectory (DirectorySetNode (DirectorySetNode))
 import SmartTokens.Types.ProgrammableLogicGlobal
-import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
+import SmartTokens.Types.ProtocolParams (
+  ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams),
+ )
 import Text.Printf (printf)
 import UntypedPlutusCore qualified as UPLC
 import Vesting.Contracts.Vesting (mkVestingValidator)
@@ -108,7 +110,9 @@ main = do
   printSizes "ConstitutionSorted" plutarchConstitutionScript plinthConstitutionScript
   putStrLn (replicate 140 '=')
   printHeader
-  mapM_ (runConstitutionComparison plutarchConstitutionScript plinthConstitutionScript) ConstitutionSorted.constitutionBenchScenarios
+  mapM_
+    (runConstitutionComparison plutarchConstitutionScript plinthConstitutionScript)
+    ConstitutionSorted.constitutionBenchScenarios
   putStrLn (replicate 140 '=')
 
   putStrLn ""
@@ -116,7 +120,9 @@ main = do
   printSizes "Crowdfund" plutarchCrowdfundScript plinthCrowdfundScript
   putStrLn (replicate 140 '=')
   printHeader
-  mapM_ (runCrowdfundComparison plutarchCrowdfundScript plinthCrowdfundScript) Crowdfund.crowdfundBenchScenarios
+  mapM_
+    (runCrowdfundComparison plutarchCrowdfundScript plinthCrowdfundScript)
+    Crowdfund.crowdfundBenchScenarios
   putStrLn (replicate 140 '=')
 
   putStrLn ""
@@ -124,7 +130,9 @@ main = do
   printSizes "Settings" plutarchSettingsScript plinthSettingsScript
   putStrLn (replicate 140 '=')
   printHeader
-  mapM_ (runSettingsComparison plutarchSettingsScript plinthSettingsScript) Settings.settingsBenchScenarios
+  mapM_
+    (runSettingsComparison plutarchSettingsScript plinthSettingsScript)
+    Settings.settingsBenchScenarios
   putStrLn (replicate 140 '=')
 
   putStrLn ""
@@ -140,7 +148,9 @@ main = do
   printSizes "Certifying" plutarchCertifyingScript plinthCertifyingScript
   putStrLn (replicate 140 '=')
   printHeader
-  mapM_ (runCertifyingComparison plutarchCertifyingScript plinthCertifyingScript) Certifying.certifyingBenchScenarios
+  mapM_
+    (runCertifyingComparison plutarchCertifyingScript plinthCertifyingScript)
+    Certifying.certifyingBenchScenarios
   putStrLn (replicate 140 '=')
 
   putStrLn ""
@@ -213,7 +223,17 @@ runComparison (name, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 evalHeadWith :: Script -> ScriptContext -> (Bool, String, String)
 evalHeadWith script ctx =
@@ -229,7 +249,8 @@ evalConstitutionWith script config ctx =
       ok = isRight res
    in (ok, show cpu, show mem)
 
-runConstitutionComparison :: Script -> Script -> (String, [(Integer, ParamValue)], ScriptContext) -> IO ()
+runConstitutionComparison
+  :: Script -> Script -> (String, [(Integer, ParamValue)], ScriptContext) -> IO ()
 runConstitutionComparison plutarchS plinthS (name, config, ctx) = do
   let (okP, cpuP, memP) = evalConstitutionWith plutarchS config ctx
       (okT, cpuT, memT) = evalConstitutionWith plinthS config ctx
@@ -237,7 +258,17 @@ runConstitutionComparison plutarchS plinthS (name, config, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 runHeadComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runHeadComparison plutarchS plinthS (name, ctx) = do
@@ -247,7 +278,17 @@ runHeadComparison plutarchS plinthS (name, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 runCrowdfundComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runCrowdfundComparison plutarchS plinthS (name, ctx) = do
@@ -257,7 +298,17 @@ runCrowdfundComparison plutarchS plinthS (name, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 settingsBootUtxoRef :: TxOutRef
 settingsBootUtxoRef = Settings.bootUtxoRef
@@ -277,7 +328,17 @@ runSettingsComparison plutarchS plinthS (name, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 runVestingComparison :: Script -> Script -> (String, ScriptContext) -> IO ()
 runVestingComparison plutarchS plinthS (name, ctx) = do
@@ -287,7 +348,17 @@ runVestingComparison plutarchS plinthS (name, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 evalCertifyingWith :: Script -> Integer -> ScriptContext -> (Bool, String, String)
 evalCertifyingWith script expiration ctx =
@@ -304,7 +375,17 @@ runCertifyingComparison plutarchS plinthS (name, expiration, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 evalVotingWith :: Script -> CurrencySymbol -> TokenName -> ScriptContext -> (Bool, String, String)
 evalVotingWith script cs tn ctx =
@@ -313,7 +394,8 @@ evalVotingWith script cs tn ctx =
       ok = isRight res
    in (ok, show cpu, show mem)
 
-runVotingComparison :: Script -> Script -> (String, CurrencySymbol, TokenName, ScriptContext) -> IO ()
+runVotingComparison
+  :: Script -> Script -> (String, CurrencySymbol, TokenName, ScriptContext) -> IO ()
 runVotingComparison plutarchS plinthS (name, cs, tn, ctx) = do
   let (okP, cpuP, memP) = evalVotingWith plutarchS cs tn ctx
       (okT, cpuT, memT) = evalVotingWith plinthS cs tn ctx
@@ -321,7 +403,17 @@ runVotingComparison plutarchS plinthS (name, cs, tn, ctx) = do
       statusT = if okT then "OK" else "FAIL" :: String
       cpuR = ratioStr cpuP cpuT
       memR = ratioStr memP memT
-  printf "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n" name cpuP memP statusP cpuT memT statusT cpuR memR
+  printf
+    "%-40s | %12s %12s %-4s | %12s %12s %-4s | %-10s %-10s\n"
+    name
+    cpuP
+    memP
+    statusP
+    cpuT
+    memT
+    statusT
+    cpuR
+    memR
 
 plutarchScript :: Script
 plutarchScript = compileNoTracing mkProgrammableLogicGlobal
@@ -508,7 +600,8 @@ mkGlobalTransferMintCtx globalRedeemer mintedQty transferOutputQty =
           )
         <> withOutput
           ( withTxOutAddress seizeInputAddr
-              <> withTxOutValue (mkAdaValue 10_000_000 <> mkValue [(programmableTransferCS, TokenName "0c", transferOutputQty)])
+              <> withTxOutValue
+                (mkAdaValue 10_000_000 <> mkValue [(programmableTransferCS, TokenName "0c", transferOutputQty)])
           )
         <> withMint (mkValue [(programmableTransferCS, TokenName "0c", mintedQty)]) (PlutusTx.toBuiltinData ())
         <> withRefInputDatumValue
@@ -621,8 +714,16 @@ mkGlobalSeizeDatumMismatchCtx =
             <> withWithdrawal issuerCred 0
             <> seizeInputWithMetadataBuilder metadataDatumA metadataRefScriptA
             <> seizeCorrespondingOutputWithMetadataBuilder metadataDatumB metadataRefScriptA
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )
 
 mkGlobalSeizeReferenceScriptMismatchCtx :: ScriptContext
@@ -633,8 +734,16 @@ mkGlobalSeizeReferenceScriptMismatchCtx =
             <> withWithdrawal issuerCred 0
             <> seizeInputWithMetadataBuilder metadataDatumA metadataRefScriptA
             <> seizeCorrespondingOutputWithMetadataBuilder metadataDatumA metadataRefScriptB
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )
 
 mkGlobalSeizeBurnCtx :: ScriptContext
@@ -646,8 +755,16 @@ mkGlobalSeizeBurnCtx =
             <> seizeInputBuilder 0
             <> withOutput (withTxOutAddress seizeInputAddr <> withTxOutValue (mkAdaValue 3_000_000))
             <> withMint (mkValue [(programmableTransferCS, TokenName "0c", -1)]) (PlutusTx.toBuiltinData ())
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )
 
 mkGlobalSeizeMintContainedCtx :: ScriptContext
@@ -657,11 +774,22 @@ mkGlobalSeizeMintContainedCtx =
         ( withRewardingScript (PlutusTx.toBuiltinData seizeRedeemer) globalCred 0
             <> withWithdrawal issuerCred 0
             <> seizeInputBuilder 0
-            <> withOutput (withTxOutAddress seizeInputAddr <> withTxOutValue (mkValue [(programmableTransferCS, TokenName "0c", 1)]))
+            <> withOutput
+              ( withTxOutAddress seizeInputAddr
+                  <> withTxOutValue (mkValue [(programmableTransferCS, TokenName "0c", 1)])
+              )
             <> withOutput (withTxOutAddress seizeInputAddr <> withTxOutValue seizeInputValue)
             <> withMint (mkValue [(programmableTransferCS, TokenName "0c", 1)]) (PlutusTx.toBuiltinData ())
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )
 
 mkGlobalSeizeMintEscapeCtx :: ScriptContext
@@ -672,10 +800,21 @@ mkGlobalSeizeMintEscapeCtx =
             <> withWithdrawal issuerCred 0
             <> seizeInputBuilder 0
             <> withOutput (withTxOutAddress seizeInputAddr <> withTxOutValue seizeInputValue)
-            <> withOutput (withTxOutAddress (pubKeyAddress signerPkh) <> withTxOutValue (mkValue [(programmableTransferCS, TokenName "0c", 1)]))
+            <> withOutput
+              ( withTxOutAddress (pubKeyAddress signerPkh)
+                  <> withTxOutValue (mkValue [(programmableTransferCS, TokenName "0c", 1)])
+              )
             <> withMint (mkValue [(programmableTransferCS, TokenName "0c", 1)]) (PlutusTx.toBuiltinData ())
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )
 
 mkGlobalSeizeDirectEscapeCtx :: ScriptContext
@@ -686,6 +825,14 @@ mkGlobalSeizeDirectEscapeCtx =
             <> withWithdrawal issuerCred 0
             <> seizeInputBuilder 0
             <> withOutput (withTxOutAddress (pubKeyAddress signerPkh) <> withTxOutValue seizeInputValue)
-            <> withRefInputDatumValue paramRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)]) (PlutusTx.toBuiltinData protocolParamsDatum)
-            <> withRefInputDatumValue dirNodeRef (pubKeyAddress signerPkh) (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)]) (PlutusTx.toBuiltinData directoryProgrammableNode)
+            <> withRefInputDatumValue
+              paramRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(protocolParamsCS, protocolParamsToken, 1)])
+              (PlutusTx.toBuiltinData protocolParamsDatum)
+            <> withRefInputDatumValue
+              dirNodeRef
+              (pubKeyAddress signerPkh)
+              (mkAdaValue 3_000_000 <> mkValue [(directoryNodeCS, TokenName "", 1)])
+              (PlutusTx.toBuiltinData directoryProgrammableNode)
         )

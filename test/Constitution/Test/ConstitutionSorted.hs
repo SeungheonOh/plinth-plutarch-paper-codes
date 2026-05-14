@@ -358,8 +358,18 @@ genChangedIntParams cfg = do
   unknowns <- do
     n <- QC.chooseInt (0, 1)
     QC.vectorOf n (QC.chooseInteger (50, 60))
-  intEntries <- mapM (\pid -> do v <- QC.chooseInteger (-200, 200); pure (pid, PlutusTx.toBuiltinData v)) selectedInts
-  ratEntries <- mapM (\pid -> do n <- QC.chooseInteger (-10, 10); d <- QC.chooseInteger (1, 10); pure (pid, PlutusTx.toBuiltinData [n, d :: Integer])) selectedRats
+  intEntries <-
+    mapM
+      (\pid -> do v <- QC.chooseInteger (-200, 200); pure (pid, PlutusTx.toBuiltinData v))
+      selectedInts
+  ratEntries <-
+    mapM
+      ( \pid -> do
+          n <- QC.chooseInteger (-10, 10)
+          d <- QC.chooseInteger (1, 10)
+          pure (pid, PlutusTx.toBuiltinData [n, d :: Integer])
+      )
+      selectedRats
   let anyEntries = map (,PlutusTx.toBuiltinData (42 :: Integer)) selectedAnys
   let listEntries = map (,PlutusTx.toBuiltinData ([] :: [Integer])) selectedLists
   let unknownEntries = map (,PlutusTx.toBuiltinData (0 :: Integer)) unknowns

@@ -73,7 +73,8 @@ pairsHasKey :: Credential -> DMap.Map Credential Lovelace -> Bool
 pairsHasKey = DMap.member
 
 {-# INLINEABLE multisigSatisfied #-}
-multisigSatisfied :: MultisigScriptD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
+multisigSatisfied
+  :: MultisigScriptD -> DList.List PubKeyHash -> POSIXTimeRange -> DMap.Map Credential Lovelace -> Bool
 multisigSatisfied script signatories validRange wdrlMap = go script
  where
   go = \case
@@ -219,24 +220,35 @@ checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl =
 
 {-# INLINEABLE settingsValidator #-}
 settingsValidator :: SettingsDatumD -> SettingsRedeemerD -> TxOutRef -> TxInfo -> Bool
-settingsValidator inputDatum redeemer ownRef TxInfo{txInfoInputs = inputs, txInfoOutputs = outputs, txInfoMint = mint, txInfoSignatories = sigs, txInfoValidRange = validRange, txInfoWdrl = wdrl} =
-  let ownInput = findOwnInput ownRef inputs
-      TxInInfo _ ownResolved = ownInput
-      TxOut ownAddress ownInputValue _ _ = ownResolved
-      ownOutput = DList.head outputs
-      TxOut ownOutputAddress ownOutputValue _ _ = ownOutput
-      outputDatum = getOutputDatum ownOutput
-      valueNotChanged = valueWithoutLovelace ownOutputValue == valueWithoutLovelace ownInputValue
-      noMint = valueIsZero mint
-   in ownOutputAddress
-        == ownAddress
-        && valueNotChanged
-        && noMint
-        && case redeemer of
-          SettingsAdminUpdateD ->
-            checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
-          TreasuryAdminUpdateD ->
-            checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
+settingsValidator
+  inputDatum
+  redeemer
+  ownRef
+  TxInfo
+    { txInfoInputs = inputs
+    , txInfoOutputs = outputs
+    , txInfoMint = mint
+    , txInfoSignatories = sigs
+    , txInfoValidRange = validRange
+    , txInfoWdrl = wdrl
+    } =
+    let ownInput = findOwnInput ownRef inputs
+        TxInInfo _ ownResolved = ownInput
+        TxOut ownAddress ownInputValue _ _ = ownResolved
+        ownOutput = DList.head outputs
+        TxOut ownOutputAddress ownOutputValue _ _ = ownOutput
+        outputDatum = getOutputDatum ownOutput
+        valueNotChanged = valueWithoutLovelace ownOutputValue == valueWithoutLovelace ownInputValue
+        noMint = valueIsZero mint
+     in ownOutputAddress
+          == ownAddress
+          && valueNotChanged
+          && noMint
+          && case redeemer of
+            SettingsAdminUpdateD ->
+              checkSettingsAdminUpdate inputDatum outputDatum sigs validRange wdrl
+            TreasuryAdminUpdateD ->
+              checkTreasuryAdminUpdate inputDatum outputDatum sigs validRange wdrl
 
 -- ============================================================================
 -- 7. Mint validator
@@ -308,7 +320,11 @@ settingsMintValidator bootUtxo ownPolicyId tx =
 mkSettingsValidator :: BuiltinData -> BuiltinData -> ()
 mkSettingsValidator bootUtxoData ctxData =
   let ctx = unsafeFromBuiltinData @ScriptContext ctxData
-      ScriptContext{scriptContextTxInfo = txInfo, scriptContextRedeemer = redeemer, scriptContextScriptInfo = scriptInfo} = ctx
+      ScriptContext
+        { scriptContextTxInfo = txInfo
+        , scriptContextRedeemer = redeemer
+        , scriptContextScriptInfo = scriptInfo
+        } = ctx
    in case scriptInfo of
         SpendingScript ownRef (Just (Datum datumData)) ->
           let datum = unsafeFromBuiltinData @SettingsDatumD datumData

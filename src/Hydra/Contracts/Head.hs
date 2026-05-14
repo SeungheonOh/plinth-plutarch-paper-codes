@@ -128,7 +128,10 @@ phasST = phoistAcyclic $ plam $ \headPolicyId v ->
           entries
    in go # pto (pto v)
 
-pmustBurnAllHeadTokens :: Term s (PValue 'Sorted 'NoGuarantees :--> PCurrencySymbol :--> PBuiltinList (PAsData PByteString) :--> PBool)
+pmustBurnAllHeadTokens
+  :: Term
+       s
+       (PValue 'Sorted 'NoGuarantees :--> PCurrencySymbol :--> PBuiltinList (PAsData PByteString) :--> PBool)
 pmustBurnAllHeadTokens = phoistAcyclic $ plam $ \mintVal headCS parties ->
   let mintMap = pto (pto mintVal)
       burntTokens =
@@ -247,7 +250,8 @@ phashPreSerializedCommits = phoistAcyclic $ plam $ \commits ->
       pnil
       xs
 
-  pinsert :: Term s (PAsData PCommit :--> PBuiltinList (PAsData PCommit) :--> PBuiltinList (PAsData PCommit))
+  pinsert
+    :: Term s (PAsData PCommit :--> PBuiltinList (PAsData PCommit) :--> PBuiltinList (PAsData PCommit))
   pinsert = pfix #$ plam $ \self x ys ->
     pelimList
       ( \h t ->
@@ -361,7 +365,8 @@ pdecodeHeadOutputOpenDatum = phoistAcyclic $ plam $ \ctx ->
         POpen openAsData -> pfromData openAsData
         _ -> perror
 
-pfindParticipationTokens :: Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PAsData PTokenName))
+pfindParticipationTokens
+  :: Term s (PCurrencySymbol :--> PValue 'Sorted anyAmount :--> PBuiltinList (PAsData PTokenName))
 pfindParticipationTokens = phoistAcyclic $ plam $ \headCS v ->
   let entries = pto (pto v)
       go = pfix #$ plam $ \self pairs ->
@@ -516,9 +521,15 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
 
       -- Find deposit input by matching incrementRef against inputs
       depositInput =
-        pmatch (plistFind # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef #== incRef) # inputs) $ \case
-          PJust i -> pfromData i
-          PNothing -> perror
+        pmatch
+          ( plistFind
+              # plam
+                (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef #== incRef)
+              # inputs
+          )
+          $ \case
+            PJust i -> pfromData i
+            PNothing -> perror
 
       depositTxOut = pmatch depositInput $ \(PTxInInfo{ptxInInfo'resolved}) -> ptxInInfo'resolved
       commits = pdepositDatum # depositTxOut
@@ -527,9 +538,16 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
 
       -- Find head input value (input with hasST)
       headInValue =
-        pmatch (plistFind # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> phasST # prevHeadId # pfromData valD) # inputs) $ \case
-          PJust i -> pmatch (pfromData i) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> pfromData valD
-          PNothing -> perror
+        pmatch
+          ( plistFind
+              # plam
+                ( \inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> phasST # prevHeadId # pfromData valD
+                )
+              # inputs
+          )
+          $ \case
+            PJust i -> pmatch (pfromData i) $ \(PTxInInfo{ptxInInfo'resolved}) -> pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value = valD}) -> pfromData valD
+            PNothing -> perror
 
       -- Get head output value (first output)
       headOutValue = pmatch (pfromData (phead # outputs)) $ \(PTxOut{ptxOut'value = valD}) -> pfromData valD
@@ -563,7 +581,10 @@ pcheckIncrement = phoistAcyclic $ plam $ \ctx openBefore redeemer -> P.do
           # pfromData sigD
 
       claimedDepositIsSpent =
-        let inputRefs = pmap # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef) # inputs
+        let inputRefs =
+              pmap
+                # plam (\inp -> pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) -> ptxInInfo'outRef)
+                # inputs
          in plistElem # incRef # inputRefs
 
   pcheck $
@@ -1009,7 +1030,8 @@ pcheckContest = phoistAcyclic $ plam $ \ctx closedDatum contestRed -> P.do
 -- 12. headIsFinalizedWith (Fanout)
 -- ============================================================================
 
-pheadIsFinalizedWith :: Term s (PScriptContext :--> PClosedDatum :--> PInteger :--> PInteger :--> PInteger :--> PUnit)
+pheadIsFinalizedWith
+  :: Term s (PScriptContext :--> PClosedDatum :--> PInteger :--> PInteger :--> PInteger :--> PUnit)
 pheadIsFinalizedWith = phoistAcyclic $ plam $ \ctx closedDatum numFanout numCommit numDecommit -> P.do
   PScriptContext{pscriptContext'txInfo} <- pmatch ctx
   PTxInfo{ptxInfo'mint, ptxInfo'outputs, ptxInfo'validRange} <- pmatch pscriptContext'txInfo
@@ -1086,7 +1108,12 @@ mkHeadValidator = plam $ \ctx ->
                      in pmatch input $ \case
                           PContest{pinput'contest = contestD} -> pcheckContest # ctx # closedDatum # pfromData contestD
                           PFanout{pfanoutNumberOfFanoutOutputs, pfanoutNumberOfCommitOutputs, pfanoutNumberOfDecommitOutputs} ->
-                            pheadIsFinalizedWith # ctx # closedDatum # pfromData pfanoutNumberOfFanoutOutputs # pfromData pfanoutNumberOfCommitOutputs # pfromData pfanoutNumberOfDecommitOutputs
+                            pheadIsFinalizedWith
+                              # ctx
+                              # closedDatum
+                              # pfromData pfanoutNumberOfFanoutOutputs
+                              # pfromData pfanoutNumberOfCommitOutputs
+                              # pfromData pfanoutNumberOfDecommitOutputs
                           _ -> perror
                   PFinal -> perror
           PDNothing -> perror

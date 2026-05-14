@@ -33,79 +33,21 @@ plistLength = phoistAcyclic $ pfix #$ plam $ \self xs ->
 -- 2. Utility functions
 -- ============================================================================
 
-pfindOwnInput :: Term s (PScriptContext :--> PTxInInfo)
-pfindOwnInput = phoistAcyclic $ plam $ \ctx ->
-  pmatch ctx $ \(PScriptContext{pscriptContext'txInfo, pscriptContext'scriptInfo}) ->
-    pmatch pscriptContext'scriptInfo $ \case
-      PSpendingScript ref _ ->
-        let txInputs = pfromData $ pmatch pscriptContext'txInfo $ \txI -> ptxInfo'inputs txI
-            go = pfix #$ plam $ \self inputs ->
-              pelimList
-                ( \inp rest ->
-                    pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
-                      pif (ptxInInfo'outRef #== ref) (pfromData inp) (self # rest)
-                )
-                perror
-                inputs
-         in go # txInputs
-      _ -> perror
-
-pgetOutputsByAddress :: Term s (PBuiltinList (PAsData PTxOut) :--> PAddress :--> PBuiltinList (PAsData PTxOut))
-pgetOutputsByAddress = phoistAcyclic $ pfix #$ plam $ \self outputs addr ->
-  pelimList
-    ( \out rest ->
-        pmatch (pfromData out) $ \(PTxOut{ptxOut'address}) ->
-          pif
-            (ptxOut'address #== addr)
-            (pcons # out # (self # rest # addr))
-            (self # rest # addr)
-    )
-    pnil
-    outputs
-
-pcredentialMatchesVkh :: Term s (PData :--> PPubKeyHash :--> PBool)
-pcredentialMatchesVkh = phoistAcyclic $ plam $ \credData vkh ->
-  plet (pasConstr # credData) $ \pair ->
-    pif
-      (pfstBuiltin # pair #== 0)
-      ( pelimList
-          (\pkhData _ -> pfromData (punsafeCoerce @(PAsData PPubKeyHash) pkhData) #== vkh)
-          (pconstant False)
-          (psndBuiltin # pair)
-      )
-      (pconstant False)
-
-pgetOutputsByVkh :: Term s (PBuiltinList (PAsData PTxOut) :--> PPubKeyHash :--> PBuiltinList (PAsData PTxOut))
-pgetOutputsByVkh = phoistAcyclic $ pfix #$ plam $ \self outputs vkh ->
-  pelimList
-    ( \out rest ->
-        let outFields = psndBuiltin # (pasConstr # pforgetData out)
-            addrFields = psndBuiltin # (pasConstr # (phead # outFields))
-            credData = phead # addrFields
-         in pif
-              (pcredentialMatchesVkh # credData # vkh)
-              (pcons # out # (self # rest # vkh))
-              (self # rest # vkh)
-    )
-    pnil
-    outputs
-
-pgetInputsByVkh :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PPubKeyHash :--> PBuiltinList (PAsData PTxInInfo))
-pgetInputsByVkh = phoistAcyclic $ pfix #$ plam $ \self inputs vkh ->
+pfindOwnInput :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PTxOutRef :--> PTxInInfo)
+pfindOwnInput = phoistAcyclic $ pfix #$ plam $ \self inputs ref ->
   pelimList
     ( \inp rest ->
-        let inpFields = psndBuiltin # (pasConstr # pforgetData inp)
-            resolvedData = phead # (ptail # inpFields)
-            outFields = psndBuiltin # (pasConstr # resolvedData)
-            addrFields = psndBuiltin # (pasConstr # (phead # outFields))
-            credData = phead # addrFields
-         in pif
-              (pcredentialMatchesVkh # credData # vkh)
-              (pcons # inp # (self # rest # vkh))
-              (self # rest # vkh)
+        pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'outRef}) ->
+          pif (ptxInInfo'outRef #== ref) (pfromData inp) (self # rest # ref)
     )
-    pnil
+    perror
     inputs
+
+pcredentialMatchesVkh :: Term s (PCredential :--> PPubKeyHash :--> PBool)
+pcredentialMatchesVkh = phoistAcyclic $ plam $ \cred vkh ->
+  pmatch cred $ \case
+    PPubKeyCredential pkh -> pfromData pkh #== vkh
+    _ -> pconstant False
 
 pgetLovelaceAmount :: Term s (PValue 'Sorted 'Positive :--> PInteger)
 pgetLovelaceAmount = phoistAcyclic $ plam $ \v ->
@@ -121,51 +63,70 @@ pgetLovelaceAmount = phoistAcyclic $ plam $ \v ->
         0
         entries
 
-pgetAdaFromInputs :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
-pgetAdaFromInputs = phoistAcyclic $ pfix #$ plam $ \self inputs ->
-  pelimList
-    ( \inp rest ->
-        pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) ->
-          pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value}) ->
-            pgetLovelaceAmount # pfromData ptxOut'value + self # rest
-    )
-    0
-    inputs
-
-pgetAdaFromOutputs :: Term s (PBuiltinList (PAsData PTxOut) :--> PInteger)
-pgetAdaFromOutputs = phoistAcyclic $ pfix #$ plam $ \self outputs ->
+-- | Single pass through outputs: sum ADA of outputs at PubKeyCredential `vkh`.
+pfoldAdaByVkhOutputs
+  :: Term s (PBuiltinList (PAsData PTxOut) :--> PPubKeyHash :--> PInteger)
+pfoldAdaByVkhOutputs = phoistAcyclic $ pfix #$ plam $ \self outputs vkh ->
   pelimList
     ( \out rest ->
-        pmatch (pfromData out) $ \(PTxOut{ptxOut'value}) ->
-          pgetLovelaceAmount # pfromData ptxOut'value + self # rest
+        pmatch (pfromData out) $ \(PTxOut{ptxOut'address, ptxOut'value}) ->
+          pmatch ptxOut'address $ \(PAddress{paddress'credential}) ->
+            pif
+              (pcredentialMatchesVkh # paddress'credential # vkh)
+              (pgetLovelaceAmount # pfromData ptxOut'value + (self # rest # vkh))
+              (self # rest # vkh)
     )
     0
     outputs
 
-pmustBeSignedBy :: Term s (PTxInfo :--> PPubKeyHash :--> PBool)
-pmustBeSignedBy = phoistAcyclic $ plam $ \txInfo pkh ->
-  pmatch txInfo $ \txI ->
-    let signatories = pfromData $ ptxInfo'signatories txI
-        go = pfix #$ plam $ \self sigs ->
-          pelimList
-            (\s rest -> pif (pfromData s #== pkh) (pconstant True) (self # rest))
-            (pconstant False)
-            sigs
-     in go # signatories
+{- | Single pass through inputs: sum ADA of inputs whose resolved output
+is at PubKeyCredential `vkh`.
+-}
+pfoldAdaByVkhInputs
+  :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PPubKeyHash :--> PInteger)
+pfoldAdaByVkhInputs = phoistAcyclic $ pfix #$ plam $ \self inputs vkh ->
+  pelimList
+    ( \inp rest ->
+        pmatch (pfromData inp) $ \(PTxInInfo{ptxInInfo'resolved}) ->
+          pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'address, ptxOut'value}) ->
+            pmatch ptxOut'address $ \(PAddress{paddress'credential}) ->
+              pif
+                (pcredentialMatchesVkh # paddress'credential # vkh)
+                (pgetLovelaceAmount # pfromData ptxOut'value + (self # rest # vkh))
+                (self # rest # vkh)
+    )
+    0
+    inputs
 
-pgetEarliestTime :: Term s (PTxInfo :--> PInteger)
-pgetEarliestTime = phoistAcyclic $ plam $ \txInfo ->
-  pmatch txInfo $ \txI ->
-    pmatch (ptxInfo'validRange txI) $ \(PInterval lb _) ->
-      pmatch lb $ \(PLowerBound ext _) ->
-        pmatch ext $ \case
-          PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t)
-          _ -> 0
+pgetOutputsByAddress
+  :: Term s (PBuiltinList (PAsData PTxOut) :--> PAddress :--> PBuiltinList (PAsData PTxOut))
+pgetOutputsByAddress = phoistAcyclic $ pfix #$ plam $ \self outputs addr ->
+  pelimList
+    ( \out rest ->
+        pmatch (pfromData out) $ \(PTxOut{ptxOut'address}) ->
+          pif
+            (ptxOut'address #== addr)
+            (pcons # out # (self # rest # addr))
+            (self # rest # addr)
+    )
+    pnil
+    outputs
 
-pgetFee :: Term s (PTxInfo :--> PInteger)
-pgetFee = phoistAcyclic $ plam $ \txInfo ->
-  pmatch txInfo $ \txI ->
-    pasInt # pforgetData (ptxInfo'fee txI)
+pmustBeSignedBy
+  :: Term s (PBuiltinList (PAsData PPubKeyHash) :--> PPubKeyHash :--> PBool)
+pmustBeSignedBy = phoistAcyclic $ pfix #$ plam $ \self sigs pkh ->
+  pelimList
+    (\s rest -> pif (pfromData s #== pkh) (pconstant True) (self # rest # pkh))
+    (pconstant False)
+    sigs
+
+pgetEarliestTime :: Term s (PInterval PPosixTime :--> PInteger)
+pgetEarliestTime = phoistAcyclic $ plam $ \validRange ->
+  pmatch validRange $ \(PInterval lb _) ->
+    pmatch lb $ \(PLowerBound ext _) ->
+      pmatch ext $ \case
+        PFinite t -> pfromData (punsafeCoerce @(PAsData PInteger) t)
+        _ -> 0
 
 pgetOutputDatum :: Term s (PTxOut :--> PVestingDatum)
 pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
@@ -179,7 +140,8 @@ pgetOutputDatum = phoistAcyclic $ plam $ \txOut ->
 -- 3. Linear vesting formula
 -- ============================================================================
 
-plinearVesting :: Term s (PInteger :--> PInteger :--> PInteger :--> PInteger :--> PInteger)
+plinearVesting
+  :: Term s (PInteger :--> PInteger :--> PInteger :--> PInteger :--> PInteger)
 plinearVesting = phoistAcyclic $ plam $ \startTimestamp duration totalAllocation timestamp ->
   pif
     (timestamp #< startTimestamp)
@@ -191,74 +153,99 @@ plinearVesting = phoistAcyclic $ plam $ \startTimestamp duration totalAllocation
     )
 
 -- ============================================================================
--- 4. Main validator logic
--- ============================================================================
-
-pvestingValidator :: Term s (PScriptContext :--> PVestingDatum :--> PVestingRedeemer :--> PUnit)
-pvestingValidator = phoistAcyclic $ plam $ \ctx datum redeemer ->
-  pmatch ctx $ \(PScriptContext{pscriptContext'txInfo}) ->
-    let txInfo = pscriptContext'txInfo
-        ownInput = pfindOwnInput # ctx
-        contractAddress = pmatch ownInput $ \(PTxInInfo{ptxInInfo'resolved}) ->
-          pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'address}) -> ptxOut'address
-        inputs = pfromData $ pmatch txInfo $ \txI -> ptxInfo'inputs txI
-        outputs = pfromData $ pmatch txInfo $ \txI -> ptxInfo'outputs txI
-        contractOutputs = pgetOutputsByAddress # outputs # contractAddress
-        contractAmount = pmatch ownInput $ \(PTxInInfo{ptxInInfo'resolved}) ->
-          pmatch ptxInInfo'resolved $ \(PTxOut{ptxOut'value}) ->
-            pgetLovelaceAmount # pfromData ptxOut'value
-     in pmatch datum $ \(PVestingDatum{pvdBeneficiary, pvdStartTimestamp, pvdDuration, pvdAmount}) ->
-          let beneficiary = pfromData pvdBeneficiary
-              startTimestamp = pfromData pvdStartTimestamp
-              duration = pfromData pvdDuration
-              totalAmount = pfromData pvdAmount
-              beneficiaryInputs = pgetInputsByVkh # inputs # beneficiary
-              beneficiaryOutputs = pgetOutputsByVkh # outputs # beneficiary
-              txEarliestTime = pgetEarliestTime # txInfo
-              released = totalAmount - contractAmount
-              releaseAmount =
-                plinearVesting # startTimestamp # duration # totalAmount # txEarliestTime - released
-              fee = pgetFee # txInfo
-           in pmatch redeemer $ \(PRelease declaredAmountData) ->
-                let declaredAmount = pfromData declaredAmountData
-                 in pcheck $
-                      pmustBeSignedBy
-                        # txInfo
-                        # beneficiary
-                        #&& declaredAmount
-                        #== releaseAmount
-                        #&& pgetAdaFromOutputs
-                        # beneficiaryOutputs
-                        #== declaredAmount
-                        + pgetAdaFromInputs # beneficiaryInputs
-                        - fee
-                          #&& pif
-                            (declaredAmount #== contractAmount)
-                            (pconstant True)
-                            ( plistLength
-                                # contractOutputs
-                                #== 1
-                                #&& plet
-                                  (pfromData (phead # contractOutputs))
-                                  ( \contractOutput ->
-                                      plet (pgetOutputDatum # contractOutput) $ \outputDatum ->
-                                        outputDatum #== datum
-                                  )
-                            )
-
--- ============================================================================
--- 5. Entry point
+-- 4. Main validator
 -- ============================================================================
 
 mkVestingValidator :: Term s (PScriptContext :--> PUnit)
 mkVestingValidator = plam $ \ctx ->
-  pmatch ctx $ \(PScriptContext{pscriptContext'redeemer, pscriptContext'scriptInfo}) ->
-    pmatch pscriptContext'scriptInfo $ \case
-      PSpendingScript _ mDatum ->
-        pmatch mDatum $ \case
-          PDJust datumRaw ->
-            let datum = pfromData $ punsafeCoerce @(PAsData PVestingDatum) (pto (pfromData datumRaw))
-                redeemer = pfromData $ punsafeCoerce @(PAsData PVestingRedeemer) (pto pscriptContext'redeemer)
-             in pvestingValidator # ctx # datum # redeemer
-          PDNothing -> perror
-      _ -> perror
+  pmatch ctx $
+    \( PScriptContext
+         { pscriptContext'txInfo
+         , pscriptContext'redeemer
+         , pscriptContext'scriptInfo
+         }
+       ) ->
+        pmatch pscriptContext'scriptInfo $ \case
+          PSpendingScript ownRef mDatum ->
+            pmatch mDatum $ \case
+              PDJust datumRaw -> unTermCont $ do
+                let datum =
+                      pfromData $
+                        punsafeCoerce @(PAsData PVestingDatum) (pto (pfromData datumRaw))
+                    redeemer =
+                      pfromData $
+                        punsafeCoerce @(PAsData PVestingRedeemer) (pto pscriptContext'redeemer)
+                PVestingDatum
+                  { pvdBeneficiary
+                  , pvdStartTimestamp
+                  , pvdDuration
+                  , pvdAmount
+                  } <-
+                  pmatchC datum
+                let beneficiary = pfromData pvdBeneficiary
+                    startTimestamp = pfromData pvdStartTimestamp
+                    duration = pfromData pvdDuration
+                    totalAmount = pfromData pvdAmount
+                PTxInfo
+                  { ptxInfo'inputs
+                  , ptxInfo'outputs
+                  , ptxInfo'fee
+                  , ptxInfo'validRange
+                  , ptxInfo'signatories
+                  } <-
+                  pmatchC pscriptContext'txInfo
+                pure $
+                  pif
+                    (pmustBeSignedBy # pfromData ptxInfo'signatories # beneficiary)
+                    ( unTermCont $ do
+                        inputs <- pletC (pfromData ptxInfo'inputs)
+                        outputs <- pletC (pfromData ptxInfo'outputs)
+                        PTxInInfo{ptxInInfo'resolved} <-
+                          pmatchC (pfindOwnInput # inputs # ownRef)
+                        ownResolved <- pletC ptxInInfo'resolved
+                        PTxOut{ptxOut'address, ptxOut'value} <- pmatchC ownResolved
+                        contractAmount <-
+                          pletC (pgetLovelaceAmount # pfromData ptxOut'value)
+                        PRelease declaredAmountData <- pmatchC redeemer
+                        declaredAmount <- pletC (pfromData declaredAmountData)
+                        let txEarliestTime = pgetEarliestTime # ptxInfo'validRange
+                            fee = pasInt # pforgetData ptxInfo'fee
+                            released = totalAmount - contractAmount
+                            releaseAmount =
+                              plinearVesting
+                                # startTimestamp
+                                # duration
+                                # totalAmount
+                                # txEarliestTime
+                                - released
+                            beneAdaOut = pfoldAdaByVkhOutputs # outputs # beneficiary
+                            beneAdaIn = pfoldAdaByVkhInputs # inputs # beneficiary
+                            checkContractOutput =
+                              pif
+                                (declaredAmount #== contractAmount)
+                                (pconstant True)
+                                ( plet (pgetOutputsByAddress # outputs # ptxOut'address) $
+                                    \contractOutputs ->
+                                      plistLength
+                                        # contractOutputs
+                                        #== 1
+                                        #&& plet
+                                          (pfromData (phead # contractOutputs))
+                                          ( \contractOutput ->
+                                              plet (pgetOutputDatum # contractOutput) $
+                                                \outputDatum -> outputDatum #== datum
+                                          )
+                                )
+                        pure $
+                          pcheck $
+                            declaredAmount
+                              #== releaseAmount
+                              #&& beneAdaOut
+                              #== declaredAmount
+                              + beneAdaIn
+                              - fee
+                                #&& checkContractOutput
+                    )
+                    perror
+              PDNothing -> perror
+          _ -> perror

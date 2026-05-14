@@ -104,12 +104,15 @@ absoluteToRelativeInputIdxs (firstAbsIdx : remainingAbsIdxs)
   go :: Integer -> [Integer] -> [Integer]
   go _ [] = []
   go previousAbsIdx (currentAbsIdx : restAbsIdxs)
-    | currentAbsIdx <= previousAbsIdx = error "absoluteToRelativeInputIdxs: absolute indexes must be strictly increasing"
+    | currentAbsIdx <= previousAbsIdx =
+        error "absoluteToRelativeInputIdxs: absolute indexes must be strictly increasing"
     | otherwise = (currentAbsIdx - previousAbsIdx - 1) : go currentAbsIdx restAbsIdxs
 
-mkSeizeActRedeemerFromRelativeInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
+mkSeizeActRedeemerFromRelativeInputIdxs
+  :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
 mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outputsStartIdx
-  | any (< 0) relativeInputIdxs = error "mkSeizeActRedeemerFromRelativeInputIdxs: negative relative index"
+  | any (< 0) relativeInputIdxs =
+      error "mkSeizeActRedeemerFromRelativeInputIdxs: negative relative index"
   | otherwise =
       SeizeAct
         directoryNodeIdx
@@ -117,7 +120,8 @@ mkSeizeActRedeemerFromRelativeInputIdxs directoryNodeIdx relativeInputIdxs outpu
         outputsStartIdx
         (fromIntegral (length relativeInputIdxs))
 
-mkSeizeActRedeemerFromAbsoluteInputIdxs :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
+mkSeizeActRedeemerFromAbsoluteInputIdxs
+  :: Integer -> [Integer] -> Integer -> ProgrammableLogicGlobalRedeemer
 mkSeizeActRedeemerFromAbsoluteInputIdxs directoryNodeIdx absoluteInputIdxs =
   mkSeizeActRedeemerFromRelativeInputIdxs
     directoryNodeIdx

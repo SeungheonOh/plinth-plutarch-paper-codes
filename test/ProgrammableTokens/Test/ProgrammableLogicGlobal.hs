@@ -51,7 +51,9 @@ import SmartTokens.Types.ProgrammableLogicGlobal (
   mkSeizeActRedeemerFromRelativeInputIdxs,
   mkTransferAct,
  )
-import SmartTokens.Types.ProtocolParams (ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams))
+import SmartTokens.Types.ProtocolParams (
+  ProgrammableLogicGlobalParams (ProgrammableLogicGlobalParams),
+ )
 import Test.QuickCheck qualified as QC
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, testCase)
@@ -65,24 +67,34 @@ mkGlobalTests name script =
       failsWith ctx = not (succeedsWith ctx)
       assertSucceeds ctx =
         let (res, _budget, logs) = evalScript (applyArguments script [PlutusTx.toData protocolParamsCS, PlutusTx.toData ctx])
-         in assertBool ("expected successful evaluation, got: " ++ show res ++ " logs: " ++ show logs) (isRight res)
+         in assertBool
+              ("expected successful evaluation, got: " ++ show res ++ " logs: " ++ show logs)
+              (isRight res)
       assertFails ctx = assertBool "expected script failure" (failsWith ctx)
    in testGroup
         name
         [ testCase "unit_seizeAct_complete_indices_succeeds" $ assertSucceeds (mkGlobalSeizeCtx 3 [0, 0, 0])
-        , testCase "unit_seizeAct_pubkey_index_rejected" $ assertFails (mkGlobalSeizeCtxWithLeadingPubKey 1 [0])
+        , testCase "unit_seizeAct_pubkey_index_rejected" $
+            assertFails (mkGlobalSeizeCtxWithLeadingPubKey 1 [0])
         , testCase "unit_seizeAct_omitted_index_rejected" $ assertFails (mkGlobalSeizeCtx 3 [0, 0])
         , testCase "unit_seizeAct_datum_mismatch_rejected" $ assertFails mkGlobalSeizeDatumMismatchCtx
-        , testCase "unit_seizeAct_reference_script_mismatch_rejected" $ assertFails mkGlobalSeizeReferenceScriptMismatchCtx
+        , testCase "unit_seizeAct_reference_script_mismatch_rejected" $
+            assertFails mkGlobalSeizeReferenceScriptMismatchCtx
         , testCase "unit_seizeAct_burn_offsets_delta_succeeds" $ assertSucceeds mkGlobalSeizeBurnCtx
-        , testCase "unit_seizeAct_mint_with_containment_succeeds" $ assertSucceeds mkGlobalSeizeMintContainedCtx
+        , testCase "unit_seizeAct_mint_with_containment_succeeds" $
+            assertSucceeds mkGlobalSeizeMintContainedCtx
         , testCase "unit_seizeAct_mint_smuggle_rejected" $ assertFails mkGlobalSeizeMintEscapeCtx
-        , testCase "unit_transferAct_burn_with_mint_proof_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) (-1) 0)
-        , testCase "unit_transferAct_burn_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) (-1) 0)
+        , testCase "unit_transferAct_burn_with_mint_proof_succeeds" $
+            assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) (-1) 0)
+        , testCase "unit_transferAct_burn_without_mint_proof_rejected" $
+            assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) (-1) 0)
         , testCase "unit_transferAct_escape_to_pubkey_rejected" $ assertFails mkGlobalTransferEscapeCtx
-        , testCase "unit_transferAct_mint_smuggle_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 1)
-        , testCase "unit_transferAct_mint_with_proof_and_containment_succeeds" $ assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 2)
-        , testCase "unit_transferAct_mint_without_mint_proof_rejected" $ assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) 1 2)
+        , testCase "unit_transferAct_mint_smuggle_rejected" $
+            assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 1)
+        , testCase "unit_transferAct_mint_with_proof_and_containment_succeeds" $
+            assertSucceeds (mkGlobalTransferMintCtx (mkTransferAct [1] [1]) 1 2)
+        , testCase "unit_transferAct_mint_without_mint_proof_rejected" $
+            assertFails (mkGlobalTransferMintCtx (mkTransferAct [1] []) 1 2)
         , testCase "unit_seizeAct_escape_to_pubkey_rejected" $ assertFails mkGlobalSeizeDirectEscapeCtx
         , testProperty "prop_seizeAct_complete_indices_succeeds" $
             QC.forAll (QC.chooseInt (1, 12)) $ \nInt ->
@@ -110,16 +122,24 @@ mkGlobalTests name script =
         , testCase "unit_outputsContain_multi_asset_succeeds" $
             assertOutputsContainSucceeds
               progLogicBaseCred
-              [ txOutAt progWalletA (mkValue [(programmableTransferCS, TokenName "0c", 2), (programmableTransferCS, TokenName "0d", 1)])
-              , txOutAt progWalletB (mkValue [(programmableTransferCS, TokenName "0c", 3), (programmableTransferCS, TokenName "0d", 4)])
+              [ txOutAt
+                  progWalletA
+                  (mkValue [(programmableTransferCS, TokenName "0c", 2), (programmableTransferCS, TokenName "0d", 1)])
+              , txOutAt
+                  progWalletB
+                  (mkValue [(programmableTransferCS, TokenName "0c", 3), (programmableTransferCS, TokenName "0d", 4)])
               , txOutAt (pubKeyAddress signerPkh) (mkValue [(programmableTransferCS, TokenName "0d", 100)])
               ]
               (mkValue [(programmableTransferCS, TokenName "0c", 5), (programmableTransferCS, TokenName "0d", 5)])
         , testCase "unit_outputsContain_multi_asset_shortfall_rejected" $
             assertOutputsContainFails
               progLogicBaseCred
-              [ txOutAt progWalletA (mkValue [(programmableTransferCS, TokenName "0c", 2), (programmableTransferCS, TokenName "0d", 1)])
-              , txOutAt progWalletB (mkValue [(programmableTransferCS, TokenName "0c", 3), (programmableTransferCS, TokenName "0d", 3)])
+              [ txOutAt
+                  progWalletA
+                  (mkValue [(programmableTransferCS, TokenName "0c", 2), (programmableTransferCS, TokenName "0d", 1)])
+              , txOutAt
+                  progWalletB
+                  (mkValue [(programmableTransferCS, TokenName "0c", 3), (programmableTransferCS, TokenName "0d", 3)])
               , txOutAt (pubKeyAddress signerPkh) (mkValue [(programmableTransferCS, TokenName "0d", 100)])
               ]
               (mkValue [(programmableTransferCS, TokenName "0c", 5), (programmableTransferCS, TokenName "0d", 5)])
@@ -352,7 +372,8 @@ mkGlobalTransferMintCtx globalRedeemer mintedQty transferOutputQty =
           )
         <> withOutput
           ( withTxOutAddress seizeInputAddr
-              <> withTxOutValue (mkAdaValue 10_000_000 <> mkValue [(programmableTransferCS, TokenName "0c", transferOutputQty)])
+              <> withTxOutValue
+                (mkAdaValue 10_000_000 <> mkValue [(programmableTransferCS, TokenName "0c", transferOutputQty)])
           )
         <> withMint (mkValue [(programmableTransferCS, TokenName "0c", mintedQty)]) (PlutusTx.toBuiltinData ())
         <> withRefInputDatumValue

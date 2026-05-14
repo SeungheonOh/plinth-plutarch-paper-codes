@@ -106,7 +106,9 @@ negDelegateStake =
 
 negDelegateSpecificDRep :: ScriptContext
 negDelegateSpecificDRep =
-  mkCertifyingContext (TxCertDelegStaking someCred (DelegVote (DRep (DRepCredential (PubKeyCredential somePkh))))) always
+  mkCertifyingContext
+    (TxCertDelegStaking someCred (DelegVote (DRep (DRepCredential (PubKeyCredential somePkh)))))
+    always
 
 negRegDelegNoConfidence :: ScriptContext
 negRegDelegNoConfidence =
@@ -126,7 +128,9 @@ negPoolRetire =
 
 negAuthHotCommittee :: ScriptContext
 negAuthHotCommittee =
-  mkCertifyingContext (TxCertAuthHotCommittee (ColdCommitteeCredential someCred) (HotCommitteeCredential someCred)) always
+  mkCertifyingContext
+    (TxCertAuthHotCommittee (ColdCommitteeCredential someCred) (HotCommitteeCredential someCred))
+    always
 
 negDelegStakeVoteAbstain :: ScriptContext
 negDelegStakeVoteAbstain =
@@ -134,7 +138,9 @@ negDelegStakeVoteAbstain =
 
 negRegDelegStakeVoteAbstain :: ScriptContext
 negRegDelegStakeVoteAbstain =
-  mkCertifyingContext (TxCertRegDeleg someCred (DelegStakeVote somePkh DRepAlwaysAbstain) 2_000_000) always
+  mkCertifyingContext
+    (TxCertRegDeleg someCred (DelegStakeVote somePkh DRepAlwaysAbstain) 2_000_000)
+    always
 
 negUnregisterAlways :: ScriptContext
 negUnregisterAlways =
@@ -226,8 +232,10 @@ genDRep =
 genTxCert :: QC.Gen TxCert
 genTxCert =
   QC.oneof
-    [ TxCertRegStaking someCred <$> QC.oneof [pure Nothing, Just . Lovelace <$> QC.chooseInteger (0, 5_000_000)]
-    , TxCertUnRegStaking someCred <$> QC.oneof [pure Nothing, Just . Lovelace <$> QC.chooseInteger (0, 5_000_000)]
+    [ TxCertRegStaking someCred
+        <$> QC.oneof [pure Nothing, Just . Lovelace <$> QC.chooseInteger (0, 5_000_000)]
+    , TxCertUnRegStaking someCred
+        <$> QC.oneof [pure Nothing, Just . Lovelace <$> QC.chooseInteger (0, 5_000_000)]
     , TxCertDelegStaking someCred <$> genDelegatee
     , TxCertRegDeleg someCred <$> genDelegatee <*> (Lovelace <$> QC.chooseInteger (0, 5_000_000))
     , pure (TxCertPoolRegister somePkh somePkh)
