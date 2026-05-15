@@ -1,0 +1,14 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E08-MissingEq/Plutarch.hs:23:29: error: [GHC-39999]
+    • No instance for ‘PEq a’ arising from a use of ‘#==’
+      Possible fix:
+        add (PEq a) to the context of
+          the type signature for:
+            pisEqual :: forall (s :: S) (a :: S -> *).
+                        Term s (a :--> (a :--> PBool))
+    • In the expression: x #== y
+      In the second argument of ‘($)’, namely ‘\ x y -> x #== y’
+      In the expression: plam $ \ x y -> x #== y
+   |
+23 | pisEqual = plam $ \x y -> x #== y
+   |                             ^^^

@@ -1,0 +1,22 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E12-MissingAppParens/Plinth.hs:30:20: error: [GHC-83865]
+    • Couldn't match expected type ‘Integer -> Withdraw -> Integer’
+                  with actual type ‘Integer’
+    • The function ‘netWithdraw’ is applied to three value arguments,
+        but its type ‘Withdraw -> Integer’ has only one
+      In the expression: netWithdraw Deduct n from
+      In a case alternative: Deduct n from -> netWithdraw Deduct n from
+   |
+30 |   Deduct n from -> netWithdraw Deduct n from
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E12-MissingAppParens/Plinth.hs:30:32: error: [GHC-83865]
+    • Couldn't match expected type ‘Withdraw’
+                  with actual type ‘Integer -> Withdraw -> Withdraw’
+    • Probable cause: ‘Deduct’ is applied to too few arguments
+      In the first argument of ‘netWithdraw’, namely ‘Deduct’
+      In the expression: netWithdraw Deduct n from
+      In a case alternative: Deduct n from -> netWithdraw Deduct n from
+   |
+30 |   Deduct n from -> netWithdraw Deduct n from
+   |                                ^^^^^^

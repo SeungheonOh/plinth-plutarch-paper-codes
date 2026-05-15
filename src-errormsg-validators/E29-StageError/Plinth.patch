@@ -1,0 +1,33 @@
+# source: src/Voting/Contracts/VotingPlinth.hs
+#
+# Bug: append a function that hands plinthc a lambda capturing a runtime parameter
+#
+# Apply with:
+#   cp <repo>/src/Voting/Contracts/VotingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -9,6 +9,7 @@
+ 
+ module Voting.Contracts.VotingPlinth (
+   plinthVotingScript,
++  plinthAdderScript,
+ ) where
+ 
+ import Plinth.Plugin
+@@ -113,3 +114,14 @@
+ plinthVotingScript :: Script
+ plinthVotingScript =
+   compiledCodeToScript $ plinthc mkVotingValidator
++
++-- BUG: `plinthc` is fed a closure capturing the runtime parameter `x`.
++-- The Plinth plugin tries to compile `\y -> x + y` to UPLC, sees that
++-- `x` is not a local/builtin/inlinable binding, and aborts with a
++-- multi-frame "Context: Compiling code:" stack trace.
++{-# INLINABLE mkAdder #-}
++mkAdder :: Integer -> PlutusTx.CompiledCode (Integer -> Integer)
++mkAdder x = plinthc (\y -> x + y)
++
++plinthAdderScript :: Script
++plinthAdderScript = compiledCodeToScript (mkAdder 1)

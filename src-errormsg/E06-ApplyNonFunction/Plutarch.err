@@ -1,0 +1,11 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E06-ApplyNonFunction/Plutarch.hs:35:28: error: [GHC-83865]
+    • Couldn't match type ‘PInteger’ with ‘a0 :--> PInteger’
+      Expected: Term s (PAsData (a0 :--> PInteger))
+        Actual: Term s (PAsData PInteger)
+    • In the first argument of ‘pfromData’, namely ‘n’
+      In the first argument of ‘(#)’, namely ‘pfromData n’
+      In the expression: pfromData n # 42
+   |
+35 |     PAmount n -> pfromData n # 42
+   |                            ^

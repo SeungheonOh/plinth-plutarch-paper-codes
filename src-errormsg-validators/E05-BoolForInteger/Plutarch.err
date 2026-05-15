@@ -1,0 +1,17 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E05-BoolForInteger/Plutarch.hs:148:16-19: error: [GHC-83865]
+    • Couldn't match type ‘Bool’ with ‘Integer’
+      Expected: AsHaskell PInteger
+        Actual: Bool
+    • In the first argument of ‘pconstant’, namely ‘True’
+      In the second argument of ‘pif’, namely ‘(pconstant True)’
+      In the expression:
+        pif
+          (timestamp #< startTimestamp) (pconstant True)
+          (pif
+             (timestamp #> startTimestamp + duration) totalAllocation
+             (pdiv # (totalAllocation * (timestamp - startTimestamp))
+                # duration))
+    |
+148 |     (pconstant True)
+    |                ^^^^

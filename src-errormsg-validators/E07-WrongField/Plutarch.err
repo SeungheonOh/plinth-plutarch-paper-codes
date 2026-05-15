@@ -1,0 +1,27 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E07-WrongField/Plutarch.hs:208:65-76: error: [GHC-83865]
+    • Couldn't match type ‘PAddress’
+                     with ‘PAsData (PValue Sorted 'Positive)’
+      Expected: Term s (PAsData (PValue Sorted 'Positive))
+        Actual: Term s PAddress
+    • In the first argument of ‘pfromData’, namely ‘ptxOut'value’
+      In the second argument of ‘(#)’, namely ‘pfromData ptxOut'value’
+      In the first argument of ‘pletC’, namely
+        ‘(pgetLovelaceAmount # pfromData ptxOut'value)’
+    |
+208 |                           pletC (pgetLovelaceAmount # pfromData ptxOut'value)
+    |                                                                 ^^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E07-WrongField/Plutarch.hs:227:74-87: error: [GHC-83865]
+    • Couldn't match type ‘PAsData (PValue Sorted 'Positive)’
+                     with ‘PAddress’
+      Expected: Term s PAddress
+        Actual: Term s (PAsData (PValue Sorted 'Positive))
+    • In the second argument of ‘(#)’, namely ‘ptxOut'address’
+      In the first argument of ‘plet’, namely
+        ‘(pgetOutputsByAddress # outputs # ptxOut'address)’
+      In the first argument of ‘($)’, namely
+        ‘plet (pgetOutputsByAddress # outputs # ptxOut'address)’
+    |
+227 |                                 ( plet (pgetOutputsByAddress # outputs # ptxOut'address) $
+    |                                                                          ^^^^^^^^^^^^^^

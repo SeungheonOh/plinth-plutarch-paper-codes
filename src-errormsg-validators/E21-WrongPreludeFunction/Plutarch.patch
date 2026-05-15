@@ -1,0 +1,36 @@
+# source: src/Voting/Contracts/Voting.hs
+#
+# Bug: append local PUserList shadowing Plutarch.List.PList + 'plength # xs'
+#
+# Apply with:
+#   cp <repo>/src/Voting/Contracts/Voting.hs <case>/Plutarch.hs
+#   (cd <case> && patch -p1 < Plutarch.patch)
+#
+--- a/Plutarch.hs
++++ b/Plutarch.hs
+@@ -14,6 +14,8 @@
+ 
+ import Plutarch.LedgerApi.V3
+ import Plutarch.Prelude
++import GHC.Generics (Generic)
++import Generics.SOP qualified as SOP
+ 
+ -- ============================================================================
+ -- 1. Infrastructure
+@@ -93,3 +95,16 @@
+       PVotingScript _ ->
+         pvotingValidator # csData # tnData # pscriptContext'txInfo
+       _ -> perror
++
++-- BUG: a local PUserList type with no `PListLike` instance, plus a
++-- 'plength # xs' call. The unsatisfiable constraint fires the E21
++-- Plutarch diagnostic.
++data PUserList (s :: S)
++  = PUNil
++  | PUCons (Term s (PAsData PInteger)) (Term s (PAsData PUserList))
++  deriving stock (Generic)
++  deriving anyclass (SOP.Generic, PIsData)
++  deriving (PlutusType) via DeriveAsDataStruct PUserList
++
++puserListLength :: Term s (PUserList :--> PInteger)
++puserListLength = plam $ \xs -> plength # xs

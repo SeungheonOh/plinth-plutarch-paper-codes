@@ -1,0 +1,22 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E21-WrongPreludeFunction/Plutarch.hs:33:27: error: [GHC-05617]
+    • Could not solve: ‘PElemConstraint PList PInteger’
+        arising from a use of ‘plength’
+    • In the first argument of ‘(#)’, namely ‘plength’
+      In the expression: plength # xs
+      In the second argument of ‘($)’, namely ‘\ xs -> plength # xs’
+   |
+33 | pmyLength = plam $ \xs -> plength # xs
+   |                           ^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E21-WrongPreludeFunction/Plutarch.hs:33:27: error: [GHC-39999]
+    • No instance for ‘PListLike PList’ arising from a use of ‘plength’
+      There are instances for similar types:
+        instance PListLike Plutarch.List.PList
+          -- Defined in ‘Plutarch.List’
+    • In the first argument of ‘(#)’, namely ‘plength’
+      In the expression: plength # xs
+      In the second argument of ‘($)’, namely ‘\ xs -> plength # xs’
+   |
+33 | pmyLength = plam $ \xs -> plength # xs
+   |                           ^^^^^^^

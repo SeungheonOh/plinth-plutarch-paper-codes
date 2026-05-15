@@ -1,0 +1,6 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E04-DivisionOnIntegers/Plinth.hs:27:17: error: [GHC-88464]
+    Variable not in scope: (/) :: Integer -> t0 -> Integer
+   |
+27 |   Amount n -> n / 2
+   |                 ^

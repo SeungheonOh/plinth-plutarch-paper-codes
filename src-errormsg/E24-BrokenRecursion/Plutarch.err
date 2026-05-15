@@ -1,0 +1,38 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plutarch.hs:37:20: error: [GHC-83865]
+    • Couldn't match type ‘PWithdraw’ with ‘PWithdraw :--> PInteger’
+      Expected: Term s (PWithdraw :--> PInteger)
+        Actual: Term s PWithdraw
+    • In the first argument of ‘(#)’, namely ‘netWithdraw’
+      In the first argument of ‘(+)’, namely
+        ‘(netWithdraw # pfromData x)’
+      In the expression:
+        (netWithdraw # pfromData x) + (netWithdraw # pfromData y)
+   |
+37 |     PJoint x y -> (netWithdraw # pfromData x) + (netWithdraw # pfromData y)
+   |                    ^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plutarch.hs:37:50: error: [GHC-83865]
+    • Couldn't match type ‘PWithdraw’ with ‘PWithdraw :--> PInteger’
+      Expected: Term s (PWithdraw :--> PInteger)
+        Actual: Term s PWithdraw
+    • In the first argument of ‘(#)’, namely ‘netWithdraw’
+      In the second argument of ‘(+)’, namely
+        ‘(netWithdraw # pfromData y)’
+      In the expression:
+        (netWithdraw # pfromData x) + (netWithdraw # pfromData y)
+   |
+37 |     PJoint x y -> (netWithdraw # pfromData x) + (netWithdraw # pfromData y)
+   |                                                  ^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plutarch.hs:38:24: error: [GHC-83865]
+    • Couldn't match type ‘PWithdraw’ with ‘PWithdraw :--> PInteger’
+      Expected: Term s (PWithdraw :--> PInteger)
+        Actual: Term s PWithdraw
+    • In the first argument of ‘(#)’, namely ‘netWithdraw’
+      In the first argument of ‘(-)’, namely
+        ‘(netWithdraw # pfromData from)’
+      In the expression: (netWithdraw # pfromData from) - pfromData n
+   |
+38 |     PDeduct n from -> (netWithdraw # pfromData from) - pfromData n
+   |                        ^^^^^^^^^^^

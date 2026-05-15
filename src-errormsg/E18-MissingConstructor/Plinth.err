@@ -1,0 +1,10 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E18-MissingConstructor/Plinth.hs:26:17: warning: [GHC-62161] [-Wincomplete-patterns]
+    Pattern match(es) are non-exhaustive
+    In a case alternative:
+        Patterns of type ‘Withdraw’ not matched:
+            Withdraw_6989586621679031491
+            (PlutusTx.Builtins.Internal.BuiltinData _)
+   |
+26 | netWithdraw w = case w of
+   |                 ^^^^^^^^^...

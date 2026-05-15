@@ -1,0 +1,6 @@
+# Per-case build artifacts produced by collect-errors.sh
+*/.build/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o

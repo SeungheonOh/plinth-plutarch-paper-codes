@@ -1,0 +1,15 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E09-MissingOrd/Plutarch.hs:24:10: error: [GHC-39999]
+    • No instance for ‘POrd a’ arising from a use of ‘#<’
+      Possible fix:
+        add (POrd a) to the context of
+          the type signature for:
+            pclamp :: forall (s :: S) (a :: S -> *).
+                      Term s (a :--> (a :--> (a :--> a)))
+    • In the first argument of ‘pif’, namely ‘(x #< lo)’
+      In the expression: pif (x #< lo) lo (pif (hi #< x) hi x)
+      In the second argument of ‘($)’, namely
+        ‘\ lo hi x -> pif (x #< lo) lo (pif (hi #< x) hi x)’
+   |
+24 |   pif (x #< lo) lo (pif (hi #< x) hi x)
+   |          ^^

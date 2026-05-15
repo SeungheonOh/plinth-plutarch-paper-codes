@@ -1,8 +1,8 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wall -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -Wall -fplugin Plinth.Plugin #-}

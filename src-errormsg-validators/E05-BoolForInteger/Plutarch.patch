@@ -1,0 +1,19 @@
+# source: src/Vesting/Contracts/Vesting.hs
+#
+# Bug: plinearVesting first pif branch returns pconstant True instead of 0
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Contracts/Vesting.hs <case>/Plutarch.hs
+#   (cd <case> && patch -p1 < Plutarch.patch)
+#
+--- a/Plutarch.hs
++++ b/Plutarch.hs
+@@ -145,7 +145,7 @@
+ plinearVesting = phoistAcyclic $ plam $ \startTimestamp duration totalAllocation timestamp ->
+   pif
+     (timestamp #< startTimestamp)
+-    0
++    (pconstant True)
+     ( pif
+         (timestamp #> startTimestamp + duration)
+         totalAllocation

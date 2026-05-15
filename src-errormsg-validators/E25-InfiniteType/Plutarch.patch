@@ -1,0 +1,21 @@
+# source: src/Vesting/Contracts/Vesting.hs
+#
+# Bug: pfoldAdaByVkhOutputs recursive call passes 'out' where the recursion expects 'rest'
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Contracts/Vesting.hs <case>/Plutarch.hs
+#   (cd <case> && patch -p1 < Plutarch.patch)
+#
+--- a/Plutarch.hs
++++ b/Plutarch.hs
+@@ -74,7 +74,9 @@
+             pif
+               (pcredentialMatchesVkh # paddress'credential # vkh)
+               (pgetLovelaceAmount # pfromData ptxOut'value + (self # rest # vkh))
+-              (self # rest # vkh)
++              -- BUG: pass `out` (an element) where the recursion expects
++              -- a list, inducing `PAsData PTxOut ~ PBuiltinList (PAsData PTxOut)`.
++              (self # out # vkh)
+     )
+     0
+     outputs

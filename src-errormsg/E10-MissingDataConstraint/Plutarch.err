@@ -1,0 +1,17 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E10-MissingDataConstraint/Plutarch.hs:36:17: error: [GHC-39999]
+    • No instance for ‘PIsData a’ arising from a use of ‘pfromData’
+      Possible fix:
+        add (PIsData a) to the context of
+          the type signature for:
+            pfromMaybeData :: forall (s :: S) (a :: S -> *).
+                              Term s (a :--> (PMaybeData a :--> a))
+    • In the expression: pfromData x
+      In a \case alternative: PDJust x -> pfromData x
+      In the second argument of ‘($)’, namely
+        ‘\case
+           PDNothing -> def
+           PDJust x -> pfromData x’
+   |
+36 |     PDJust x -> pfromData x
+   |                 ^^^^^^^^^

@@ -1,0 +1,7 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E23-WrongPatternOrder/Plutarch.hs:36:5: warning: [GHC-53633] [-Woverlapping-patterns]
+    Pattern match is redundant
+    In a \case alternative: PCons x rest -> ...
+   |
+36 |     PCons x rest -> self # f # (f # acc # x) # rest
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

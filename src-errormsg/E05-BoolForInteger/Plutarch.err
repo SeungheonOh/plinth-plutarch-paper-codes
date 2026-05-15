@@ -1,0 +1,72 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E05-BoolForInteger/Plutarch.hs:33:23: error: [GHC-18872]
+    • Couldn't match type ‘PBool’ with ‘PInteger’
+        arising from a use of ‘plam’
+    • In the first argument of ‘($)’, namely ‘plam’
+      In the second argument of ‘(#$)’, namely
+        ‘plam
+           $ \ self wt
+               -> pmatch wt
+                    $ \ w
+                        -> case w of
+                             PAmount n -> ...
+                             PJoint x y -> ...
+                             PDeduct n from -> ...’
+      In the expression:
+        pfix
+          #$
+            plam
+              $ \ self wt
+                  -> pmatch wt
+                       $ \ w
+                           -> case w of
+                                PAmount n -> ...
+                                PJoint x y -> ...
+                                PDeduct n from -> ...
+   |
+33 | netWithdraw = pfix #$ plam $ \self wt -> pmatch wt $ \w ->
+   |                       ^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E05-BoolForInteger/Plutarch.hs:36:20: error: [GHC-83865]
+    • Couldn't match type ‘PInteger’ with ‘PBool’
+      Expected: Term s (PWithdraw :--> PBool)
+        Actual: Term s (PWithdraw :--> PInteger)
+    • In the first argument of ‘(#)’, namely ‘self’
+      In the first argument of ‘(+)’, namely ‘(self # pfromData x)’
+      In the expression: (self # pfromData x) + (self # pfromData y)
+   |
+36 |     PJoint x y -> (self # pfromData x) + (self # pfromData y)
+   |                    ^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E05-BoolForInteger/Plutarch.hs:36:43: error: [GHC-83865]
+    • Couldn't match type ‘PInteger’ with ‘PBool’
+      Expected: Term s (PWithdraw :--> PBool)
+        Actual: Term s (PWithdraw :--> PInteger)
+    • In the first argument of ‘(#)’, namely ‘self’
+      In the second argument of ‘(+)’, namely ‘(self # pfromData y)’
+      In the expression: (self # pfromData x) + (self # pfromData y)
+   |
+36 |     PJoint x y -> (self # pfromData x) + (self # pfromData y)
+   |                                           ^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E05-BoolForInteger/Plutarch.hs:37:24: error: [GHC-83865]
+    • Couldn't match type ‘PInteger’ with ‘PBool’
+      Expected: Term s (PWithdraw :--> PBool)
+        Actual: Term s (PWithdraw :--> PInteger)
+    • In the first argument of ‘(#)’, namely ‘self’
+      In the first argument of ‘(-)’, namely ‘(self # pfromData from)’
+      In the expression: (self # pfromData from) - pfromData n
+   |
+37 |     PDeduct n from -> (self # pfromData from) - pfromData n
+   |                        ^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E05-BoolForInteger/Plutarch.hs:37:59: error: [GHC-83865]
+    • Couldn't match type ‘PInteger’ with ‘PBool’
+      Expected: Term s (PAsData PBool)
+        Actual: Term s (PAsData PInteger)
+    • In the first argument of ‘pfromData’, namely ‘n’
+      In the second argument of ‘(-)’, namely ‘pfromData n’
+      In the expression: (self # pfromData from) - pfromData n
+   |
+37 |     PDeduct n from -> (self # pfromData from) - pfromData n
+   |                                                           ^

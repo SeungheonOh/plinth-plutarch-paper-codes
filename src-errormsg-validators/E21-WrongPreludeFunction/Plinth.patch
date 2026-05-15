@@ -1,0 +1,23 @@
+# source: src/Voting/Contracts/VotingPlinth.hs
+#
+# Bug: append UserList SOP type + 'userListLength xs = length xs' (length only types on [a])
+#
+# Apply with:
+#   cp <repo>/src/Voting/Contracts/VotingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -113,3 +113,12 @@
+ plinthVotingScript :: Script
+ plinthVotingScript =
+   compiledCodeToScript $ plinthc mkVotingValidator
++
++-- BUG: custom SOP list + a call to PlutusTx.Prelude.length, whose only
++-- signature is `[a] -> Integer`. The mismatch fires the E21 diagnostic.
++data UserList a
++  = UNil
++  | UCons a (UserList a)
++
++userListLength :: UserList Integer -> Integer
++userListLength xs = length xs

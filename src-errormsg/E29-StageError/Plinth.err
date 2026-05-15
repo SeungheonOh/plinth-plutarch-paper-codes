@@ -1,0 +1,33 @@
+Plinth Compilation Error:
+Context: Compiling code:
+         \ (y_a661 [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case y_a661 of y_X1 [Occ=Once1] { __DEFAULT ->
+           PlutusTx.Numeric.+
+             @GHC.Num.Integer.Integer
+             PlutusTx.Numeric.$fAdditiveSemigroupInteger
+             x
+             y_X1
+           }
+Context: Compiling code:
+         case y_a661 of y_X1 [Occ=Once1] { __DEFAULT ->
+         PlutusTx.Numeric.+
+           @GHC.Num.Integer.Integer
+           PlutusTx.Numeric.$fAdditiveSemigroupInteger
+           x
+           y_X1
+         }
+Context: Compiling code:
+         PlutusTx.Numeric.+
+           @GHC.Num.Integer.Integer
+           PlutusTx.Numeric.$fAdditiveSemigroupInteger
+           x
+           y_X1
+Context: Compiling code:
+         PlutusTx.Numeric.+
+           @GHC.Num.Integer.Integer
+           PlutusTx.Numeric.$fAdditiveSemigroupInteger
+           x
+Context: Compiling code:
+         x
+Error: Reference to a name which is not a local, a builtin, or an external INLINABLE function: Variable x
+       OtherCon []

@@ -1,0 +1,36 @@
+# source: src/Voting/Contracts/VotingPlinth.hs
+#
+# Bug: prepend GADTs pragma, append a GADT + a plinthc-compiled binding
+#
+# Apply with:
+#   cp <repo>/src/Voting/Contracts/VotingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -1,3 +1,4 @@
++{-# LANGUAGE GADTs #-}
+ {-# LANGUAGE OverloadedStrings #-}
+ {-# LANGUAGE Strict #-}
+ {-# LANGUAGE NoImplicitPrelude #-}
+@@ -113,3 +114,20 @@
+ plinthVotingScript :: Script
+ plinthVotingScript =
+   compiledCodeToScript $ plinthc mkVotingValidator
++
++-- BUG: a small GADT and a `plinthc`-compiled binding that uses it.
++-- Plinth's Core->PIR stage rejects the GADTs language extension.
++data Tag a where
++  TagInt  :: Tag Integer
++  TagBool :: Tag Bool
++
++useTag :: Tag Integer -> Integer
++useTag TagInt = 1
++
++{-# INLINEABLE buggyEntry #-}
++buggyEntry :: BuiltinData -> ()
++buggyEntry _ = if useTag TagInt == 1 then () else error ()
++
++plinthBuggyScript :: Script
++plinthBuggyScript =
++  compiledCodeToScript $ plinthc buggyEntry

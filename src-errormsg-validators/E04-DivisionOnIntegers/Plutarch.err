@@ -1,0 +1,19 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E04-DivisionOnIntegers/Plutarch.hs:152:59: error: [GHC-39999]
+    • No instance for ‘Fractional (Term s' PInteger)’
+        arising from a use of ‘/’
+    • In the third argument of ‘pif’, namely
+        ‘((totalAllocation * (timestamp - startTimestamp)) / duration)’
+      In the third argument of ‘pif’, namely
+        ‘(pif
+            (timestamp #> startTimestamp + duration) totalAllocation
+            ((totalAllocation * (timestamp - startTimestamp)) / duration))’
+      In the expression:
+        pif
+          (timestamp #< startTimestamp) 0
+          (pif
+             (timestamp #> startTimestamp + duration) totalAllocation
+             ((totalAllocation * (timestamp - startTimestamp)) / duration))
+    |
+152 |         ((totalAllocation * (timestamp - startTimestamp)) / duration)
+    |                                                           ^

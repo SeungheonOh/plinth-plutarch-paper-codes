@@ -1,0 +1,26 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:38:9: error: [GHC-83865]
+    • Couldn't match expected type: Term
+                                      s0 (PInteger :--> (PInteger :--> PInteger))
+                                    -> t0 -> Term s PInteger
+                  with actual type: Term s PInteger
+    • The function ‘n'’ is applied to two value arguments,
+        but its type ‘Term s PInteger’ has none
+      In the expression: n' pmod 2
+      In the second argument of ‘($)’, namely ‘\ n' -> n' pmod 2’
+    • Relevant bindings include
+        n' :: Term s PInteger
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:37:29)
+        n :: Term s (PAsData PInteger)
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:36:13)
+        w :: PWithdraw s
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:34:55)
+        wt :: Term s PWithdraw
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:34:36)
+        self :: Term s (PWithdraw :--> PInteger)
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:34:31)
+        netWithdraw :: Term s (PWithdraw :--> PInteger)
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E13-InfixConfusion/Plutarch.hs:34:1)
+   |
+38 |         n' pmod 2
+   |         ^^^^^^^^^
