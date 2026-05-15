@@ -1,0 +1,8 @@
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E37-MissingPAsDataField/Plutarch.hs:59:13-22: error: [GHC-64725]
+    • Data representation can only hold types whose inner most representation is PData
+      Inner most representation of "PInteger" is "POpaque"
+    • When deriving the instance for (PlutusType PVestingDatum)
+   |
+59 |   deriving (PlutusType) via (DeriveAsDataStruct PVestingDatum)
+   |             ^^^^^^^^^^

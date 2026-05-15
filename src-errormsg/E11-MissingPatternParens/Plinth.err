@@ -1,3 +1,8 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E11-MissingPatternParens/Plinth.hs:15:1: error: [GHC-91938]
+    equations for ‘foldList’ have different numbers of arguments
+      /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E11-MissingPatternParens/Plinth.hs:15:1-24
+      /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E11-MissingPatternParens/Plinth.hs:17:1-54
+   |
+15 | foldList _ acc Nil = acc
+   | ^^^^^^^^^^^^^^^^^^^^^^^^...

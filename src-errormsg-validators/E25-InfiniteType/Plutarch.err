@@ -1,5 +1,5 @@
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E25-InfiniteType/Plutarch.hs:79:23-25: error: [GHC-83865]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E25-InfiniteType/Plutarch.hs:79:23-25: error: [GHC-83865]
     • Couldn't match type: PAsData PTxOut
                      with: PBuiltinList (PAsData PTxOut)
       Expected: Term s' (PBuiltinList (PAsData PTxOut))

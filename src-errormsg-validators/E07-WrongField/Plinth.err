@@ -1,15 +1,15 @@
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E07-WrongField/Plinth.hs:190:49-56: error: [GHC-83865]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E07-WrongField/Plinth.hs:191:49-56: error: [GHC-83865]
     • Couldn't match expected type ‘Value’ with actual type ‘Address’
     • In the first argument of ‘getLovelaceAmount’, namely ‘ownValue’
       In the expression: getLovelaceAmount ownValue
       In an equation for ‘contractAmount’:
           contractAmount = getLovelaceAmount ownValue
     |
-190 |              contractAmount = getLovelaceAmount ownValue
+191 |              contractAmount = getLovelaceAmount ownValue
     |                                                 ^^^^^^^^
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E07-WrongField/Plinth.hs:203:76-85: error: [GHC-83865]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E07-WrongField/Plinth.hs:204:76-85: error: [GHC-83865]
     • Couldn't match expected type ‘Address’ with actual type ‘Value’
     • In the second argument of ‘getOutputsByAddress’, namely
         ‘ownAddress’
@@ -17,5 +17,5 @@
       In an equation for ‘contractOutputs’:
           contractOutputs = getOutputsByAddress outputs ownAddress
     |
-203 |                       || let contractOutputs = getOutputsByAddress outputs ownAddress
+204 |                       || let contractOutputs = getOutputsByAddress outputs ownAddress
     |                                                                            ^^^^^^^^^^

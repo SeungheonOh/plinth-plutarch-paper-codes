@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single workflow script for src-errormsg-top8:
+# Single workflow script for src-errormsg-validators:
 #
 #   1. Generate <case>/<variant>.hs by `cp`-ing the upstream validator from
 #      src/ and applying <case>/<variant>.patch on top of it.
@@ -9,8 +9,8 @@
 #      the result to <case>/<variant>.err next to the source file.
 #
 # Usage:
-#   src-errormsg-top8/run.sh                # process every case directory
-#   src-errormsg-top8/run.sh E04 E18        # only matching directories
+#   src-errormsg-validators/run.sh                # process every case directory
+#   src-errormsg-validators/run.sh E04 E18        # only matching directories
 #
 # Requires the project's Nix dev shell. The compiler is the one cabal
 # resolves for the project (GHC 9.6.6, plutus-tx-plugin 1.64.0.0,
@@ -20,7 +20,7 @@
 set -u
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ERROR_ROOT="$REPO_ROOT/src-errormsg-top8"
+ERROR_ROOT="$REPO_ROOT/src-errormsg-validators"
 
 declare -a SELECT=()
 for arg in "$@"; do
@@ -97,12 +97,16 @@ compile_and_capture() {
   ) >"$raw" 2>&1
   local rc=$?
 
+  # The Plinth plugin emits SGR escapes around its caret underlines even
+  # when -fdiagnostics-color=never is passed; strip them so .err files
+  # stay diffable.
   sed -E \
     -e '/^Using saved setting/d' \
     -e '/^Configuration is affected by/d' \
     -e "/^'\\/Users.*cabal.project'/d" \
     -e '/^Loaded package environment from/d' \
     -e '/^warning: Git tree/d' \
+    -e $'s/\x1b\\[[0-9;]*[A-Za-z]//g' \
     "$raw" > "$err_out"
   rm -f "$raw"
 

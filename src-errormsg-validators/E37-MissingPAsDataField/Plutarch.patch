@@ -1,0 +1,24 @@
+# source: src/Vesting/Types/VestingState.hs
+#
+# Bug: PVestingDatum field `pvdAmount` is declared as `Term s PInteger`
+# instead of `Term s (PAsData PInteger)`. `DeriveAsDataStruct`'s
+# instance requires every field's innermost representation to be
+# `PData`, enforced by the `PInnermostIsDataDataRepr` constraint /
+# `PInnermostIsData'` type family. The type family fires its
+# `TypeError` branch naming the offending field type.
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Types/VestingState.hs <case>/Plutarch.hs
+#   (cd <case> && patch -p1 < Plutarch.patch)
+#
+--- a/Plutarch.hs
++++ b/Plutarch.hs
+@@ -52,7 +52,7 @@
+   { pvdBeneficiary :: Term s (PAsData PPubKeyHash)
+   , pvdStartTimestamp :: Term s (PAsData PInteger)
+   , pvdDuration :: Term s (PAsData PInteger)
+-  , pvdAmount :: Term s (PAsData PInteger)
++  , pvdAmount :: Term s PInteger
+   }
+   deriving stock (Generic)
+   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)

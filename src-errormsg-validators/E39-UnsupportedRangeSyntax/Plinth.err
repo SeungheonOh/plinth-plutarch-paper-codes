@@ -1,0 +1,930 @@
+Plinth Compilation Error:
+Context: Compiling code at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs:197:16-28:
+         Vesting.Contracts.VestingPlinth.linearVesting
+Context: Compiling code:
+         \ (startTimestamp [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (duration [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (totalAllocation [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (timestamp [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case startTimestamp of startTimestamp { __DEFAULT ->
+           case duration of duration { __DEFAULT ->
+           case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+           case timestamp of timestamp { __DEFAULT ->
+           case PlutusTx.Builtins.Internal.lessThanInteger
+                  timestamp startTimestamp
+           of {
+             GHC.Types.False ->
+               case case PlutusTx.Builtins.Internal.addInteger
+                           startTimestamp duration
+                    of y1 [Occ=Once1]
+                    { __DEFAULT ->
+                    PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                    }
+               of {
+                 GHC.Types.False ->
+                   case GHC.Base.build
+                          @GHC.Num.Integer.Integer
+                          (\ (@b)
+                             (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                             (n [Occ=Once1, OS=OneShot] :: b) ->
+                             GHC.Enum.enumDeltaToInteger1FB
+                               @b
+                               c
+                               n
+                               (GHC.Num.Integer.IS 1#)
+                               (PlutusTx.Plugin.Utils.anchor
+                                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                  @GHC.Num.Integer.Integer
+                                  duration))
+                   of {
+                     [] -> GHC.Num.Integer.IS 0#;
+                     : x [Occ=Once1] _ [Occ=Dead] ->
+                       PlutusTx.Plugin.Utils.anchor
+                         @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                         @(GHC.Num.Integer.Integer
+                           -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                         PlutusTx.Builtins.divideInteger
+                         (case PlutusTx.Plugin.Utils.anchor
+                                 @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                                 @GHC.Num.Integer.Integer
+                                 totalAllocation
+                          of x1 [Occ=Once1]
+                          { __DEFAULT ->
+                          case case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                      @GHC.Num.Integer.Integer
+                                      timestamp
+                               of x1 [Occ=Once1]
+                               { __DEFAULT ->
+                               case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                      @GHC.Num.Integer.Integer
+                                      startTimestamp
+                               of y1 [Occ=Once1]
+                               { __DEFAULT ->
+                               PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                               }
+                               }
+                          of y1 [Occ=Once1]
+                          { __DEFAULT ->
+                          PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                          }
+                          })
+                         (PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                            @GHC.Num.Integer.Integer
+                            x)
+                   };
+                 GHC.Types.True ->
+                   PlutusTx.Plugin.Utils.anchor
+                     @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                     @GHC.Num.Integer.Integer
+                     totalAllocation
+               };
+             GHC.Types.True -> GHC.Num.Integer.IS 0#
+           }
+           }
+           }
+           }
+           }
+Context: Compiling code:
+         \ (duration [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (totalAllocation [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (timestamp [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case startTimestamp of startTimestamp { __DEFAULT ->
+           case duration of duration { __DEFAULT ->
+           case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+           case timestamp of timestamp { __DEFAULT ->
+           case PlutusTx.Builtins.Internal.lessThanInteger
+                  timestamp startTimestamp
+           of {
+             GHC.Types.False ->
+               case case PlutusTx.Builtins.Internal.addInteger
+                           startTimestamp duration
+                    of y1 [Occ=Once1]
+                    { __DEFAULT ->
+                    PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                    }
+               of {
+                 GHC.Types.False ->
+                   case GHC.Base.build
+                          @GHC.Num.Integer.Integer
+                          (\ (@b)
+                             (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                             (n [Occ=Once1, OS=OneShot] :: b) ->
+                             GHC.Enum.enumDeltaToInteger1FB
+                               @b
+                               c
+                               n
+                               (GHC.Num.Integer.IS 1#)
+                               (PlutusTx.Plugin.Utils.anchor
+                                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                  @GHC.Num.Integer.Integer
+                                  duration))
+                   of {
+                     [] -> GHC.Num.Integer.IS 0#;
+                     : x [Occ=Once1] _ [Occ=Dead] ->
+                       PlutusTx.Plugin.Utils.anchor
+                         @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                         @(GHC.Num.Integer.Integer
+                           -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                         PlutusTx.Builtins.divideInteger
+                         (case PlutusTx.Plugin.Utils.anchor
+                                 @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                                 @GHC.Num.Integer.Integer
+                                 totalAllocation
+                          of x1 [Occ=Once1]
+                          { __DEFAULT ->
+                          case case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                      @GHC.Num.Integer.Integer
+                                      timestamp
+                               of x1 [Occ=Once1]
+                               { __DEFAULT ->
+                               case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                      @GHC.Num.Integer.Integer
+                                      startTimestamp
+                               of y1 [Occ=Once1]
+                               { __DEFAULT ->
+                               PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                               }
+                               }
+                          of y1 [Occ=Once1]
+                          { __DEFAULT ->
+                          PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                          }
+                          })
+                         (PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                            @GHC.Num.Integer.Integer
+                            x)
+                   };
+                 GHC.Types.True ->
+                   PlutusTx.Plugin.Utils.anchor
+                     @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                     @GHC.Num.Integer.Integer
+                     totalAllocation
+               };
+             GHC.Types.True -> GHC.Num.Integer.IS 0#
+           }
+           }
+           }
+           }
+           }
+Context: Compiling code:
+         \ (totalAllocation [Occ=Once1] :: GHC.Num.Integer.Integer)
+           (timestamp [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case startTimestamp of startTimestamp { __DEFAULT ->
+           case duration of duration { __DEFAULT ->
+           case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+           case timestamp of timestamp { __DEFAULT ->
+           case PlutusTx.Builtins.Internal.lessThanInteger
+                  timestamp startTimestamp
+           of {
+             GHC.Types.False ->
+               case case PlutusTx.Builtins.Internal.addInteger
+                           startTimestamp duration
+                    of y1 [Occ=Once1]
+                    { __DEFAULT ->
+                    PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                    }
+               of {
+                 GHC.Types.False ->
+                   case GHC.Base.build
+                          @GHC.Num.Integer.Integer
+                          (\ (@b)
+                             (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                             (n [Occ=Once1, OS=OneShot] :: b) ->
+                             GHC.Enum.enumDeltaToInteger1FB
+                               @b
+                               c
+                               n
+                               (GHC.Num.Integer.IS 1#)
+                               (PlutusTx.Plugin.Utils.anchor
+                                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                  @GHC.Num.Integer.Integer
+                                  duration))
+                   of {
+                     [] -> GHC.Num.Integer.IS 0#;
+                     : x [Occ=Once1] _ [Occ=Dead] ->
+                       PlutusTx.Plugin.Utils.anchor
+                         @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                         @(GHC.Num.Integer.Integer
+                           -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                         PlutusTx.Builtins.divideInteger
+                         (case PlutusTx.Plugin.Utils.anchor
+                                 @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                                 @GHC.Num.Integer.Integer
+                                 totalAllocation
+                          of x1 [Occ=Once1]
+                          { __DEFAULT ->
+                          case case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                      @GHC.Num.Integer.Integer
+                                      timestamp
+                               of x1 [Occ=Once1]
+                               { __DEFAULT ->
+                               case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                      @GHC.Num.Integer.Integer
+                                      startTimestamp
+                               of y1 [Occ=Once1]
+                               { __DEFAULT ->
+                               PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                               }
+                               }
+                          of y1 [Occ=Once1]
+                          { __DEFAULT ->
+                          PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                          }
+                          })
+                         (PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                            @GHC.Num.Integer.Integer
+                            x)
+                   };
+                 GHC.Types.True ->
+                   PlutusTx.Plugin.Utils.anchor
+                     @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                     @GHC.Num.Integer.Integer
+                     totalAllocation
+               };
+             GHC.Types.True -> GHC.Num.Integer.IS 0#
+           }
+           }
+           }
+           }
+           }
+Context: Compiling code:
+         \ (timestamp [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case startTimestamp of startTimestamp { __DEFAULT ->
+           case duration of duration { __DEFAULT ->
+           case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+           case timestamp of timestamp { __DEFAULT ->
+           case PlutusTx.Builtins.Internal.lessThanInteger
+                  timestamp startTimestamp
+           of {
+             GHC.Types.False ->
+               case case PlutusTx.Builtins.Internal.addInteger
+                           startTimestamp duration
+                    of y1 [Occ=Once1]
+                    { __DEFAULT ->
+                    PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                    }
+               of {
+                 GHC.Types.False ->
+                   case GHC.Base.build
+                          @GHC.Num.Integer.Integer
+                          (\ (@b)
+                             (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                             (n [Occ=Once1, OS=OneShot] :: b) ->
+                             GHC.Enum.enumDeltaToInteger1FB
+                               @b
+                               c
+                               n
+                               (GHC.Num.Integer.IS 1#)
+                               (PlutusTx.Plugin.Utils.anchor
+                                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                  @GHC.Num.Integer.Integer
+                                  duration))
+                   of {
+                     [] -> GHC.Num.Integer.IS 0#;
+                     : x [Occ=Once1] _ [Occ=Dead] ->
+                       PlutusTx.Plugin.Utils.anchor
+                         @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                         @(GHC.Num.Integer.Integer
+                           -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                         PlutusTx.Builtins.divideInteger
+                         (case PlutusTx.Plugin.Utils.anchor
+                                 @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                                 @GHC.Num.Integer.Integer
+                                 totalAllocation
+                          of x1 [Occ=Once1]
+                          { __DEFAULT ->
+                          case case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                      @GHC.Num.Integer.Integer
+                                      timestamp
+                               of x1 [Occ=Once1]
+                               { __DEFAULT ->
+                               case PlutusTx.Plugin.Utils.anchor
+                                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                      @GHC.Num.Integer.Integer
+                                      startTimestamp
+                               of y1 [Occ=Once1]
+                               { __DEFAULT ->
+                               PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                               }
+                               }
+                          of y1 [Occ=Once1]
+                          { __DEFAULT ->
+                          PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                          }
+                          })
+                         (PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                            @GHC.Num.Integer.Integer
+                            x)
+                   };
+                 GHC.Types.True ->
+                   PlutusTx.Plugin.Utils.anchor
+                     @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                     @GHC.Num.Integer.Integer
+                     totalAllocation
+               };
+             GHC.Types.True -> GHC.Num.Integer.IS 0#
+           }
+           }
+           }
+           }
+           }
+Context: Compiling code:
+         case startTimestamp of startTimestamp { __DEFAULT ->
+         case duration of duration { __DEFAULT ->
+         case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+         case timestamp of timestamp { __DEFAULT ->
+         case PlutusTx.Builtins.Internal.lessThanInteger
+                timestamp startTimestamp
+         of {
+           GHC.Types.False ->
+             case case PlutusTx.Builtins.Internal.addInteger
+                         startTimestamp duration
+                  of y1 [Occ=Once1]
+                  { __DEFAULT ->
+                  PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                  }
+             of {
+               GHC.Types.False ->
+                 case GHC.Base.build
+                        @GHC.Num.Integer.Integer
+                        (\ (@b)
+                           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                           (n [Occ=Once1, OS=OneShot] :: b) ->
+                           GHC.Enum.enumDeltaToInteger1FB
+                             @b
+                             c
+                             n
+                             (GHC.Num.Integer.IS 1#)
+                             (PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                @GHC.Num.Integer.Integer
+                                duration))
+                 of {
+                   [] -> GHC.Num.Integer.IS 0#;
+                   : x [Occ=Once1] _ [Occ=Dead] ->
+                     PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                       @(GHC.Num.Integer.Integer
+                         -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                       PlutusTx.Builtins.divideInteger
+                       (case PlutusTx.Plugin.Utils.anchor
+                               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                               @GHC.Num.Integer.Integer
+                               totalAllocation
+                        of x1 [Occ=Once1]
+                        { __DEFAULT ->
+                        case case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                    @GHC.Num.Integer.Integer
+                                    timestamp
+                             of x1 [Occ=Once1]
+                             { __DEFAULT ->
+                             case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                    @GHC.Num.Integer.Integer
+                                    startTimestamp
+                             of y1 [Occ=Once1]
+                             { __DEFAULT ->
+                             PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                             }
+                             }
+                        of y1 [Occ=Once1]
+                        { __DEFAULT ->
+                        PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                        }
+                        })
+                       (PlutusTx.Plugin.Utils.anchor
+                          @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                          @GHC.Num.Integer.Integer
+                          x)
+                 };
+               GHC.Types.True ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                   @GHC.Num.Integer.Integer
+                   totalAllocation
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 0#
+         }
+         }
+         }
+         }
+         }
+Context: Compiling code:
+         case duration of duration { __DEFAULT ->
+         case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+         case timestamp of timestamp { __DEFAULT ->
+         case PlutusTx.Builtins.Internal.lessThanInteger
+                timestamp startTimestamp
+         of {
+           GHC.Types.False ->
+             case case PlutusTx.Builtins.Internal.addInteger
+                         startTimestamp duration
+                  of y1 [Occ=Once1]
+                  { __DEFAULT ->
+                  PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                  }
+             of {
+               GHC.Types.False ->
+                 case GHC.Base.build
+                        @GHC.Num.Integer.Integer
+                        (\ (@b)
+                           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                           (n [Occ=Once1, OS=OneShot] :: b) ->
+                           GHC.Enum.enumDeltaToInteger1FB
+                             @b
+                             c
+                             n
+                             (GHC.Num.Integer.IS 1#)
+                             (PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                @GHC.Num.Integer.Integer
+                                duration))
+                 of {
+                   [] -> GHC.Num.Integer.IS 0#;
+                   : x [Occ=Once1] _ [Occ=Dead] ->
+                     PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                       @(GHC.Num.Integer.Integer
+                         -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                       PlutusTx.Builtins.divideInteger
+                       (case PlutusTx.Plugin.Utils.anchor
+                               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                               @GHC.Num.Integer.Integer
+                               totalAllocation
+                        of x1 [Occ=Once1]
+                        { __DEFAULT ->
+                        case case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                    @GHC.Num.Integer.Integer
+                                    timestamp
+                             of x1 [Occ=Once1]
+                             { __DEFAULT ->
+                             case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                    @GHC.Num.Integer.Integer
+                                    startTimestamp
+                             of y1 [Occ=Once1]
+                             { __DEFAULT ->
+                             PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                             }
+                             }
+                        of y1 [Occ=Once1]
+                        { __DEFAULT ->
+                        PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                        }
+                        })
+                       (PlutusTx.Plugin.Utils.anchor
+                          @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                          @GHC.Num.Integer.Integer
+                          x)
+                 };
+               GHC.Types.True ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                   @GHC.Num.Integer.Integer
+                   totalAllocation
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 0#
+         }
+         }
+         }
+         }
+Context: Compiling code:
+         case totalAllocation of totalAllocation [Occ=Once2] { __DEFAULT ->
+         case timestamp of timestamp { __DEFAULT ->
+         case PlutusTx.Builtins.Internal.lessThanInteger
+                timestamp startTimestamp
+         of {
+           GHC.Types.False ->
+             case case PlutusTx.Builtins.Internal.addInteger
+                         startTimestamp duration
+                  of y1 [Occ=Once1]
+                  { __DEFAULT ->
+                  PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                  }
+             of {
+               GHC.Types.False ->
+                 case GHC.Base.build
+                        @GHC.Num.Integer.Integer
+                        (\ (@b)
+                           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                           (n [Occ=Once1, OS=OneShot] :: b) ->
+                           GHC.Enum.enumDeltaToInteger1FB
+                             @b
+                             c
+                             n
+                             (GHC.Num.Integer.IS 1#)
+                             (PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                @GHC.Num.Integer.Integer
+                                duration))
+                 of {
+                   [] -> GHC.Num.Integer.IS 0#;
+                   : x [Occ=Once1] _ [Occ=Dead] ->
+                     PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                       @(GHC.Num.Integer.Integer
+                         -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                       PlutusTx.Builtins.divideInteger
+                       (case PlutusTx.Plugin.Utils.anchor
+                               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                               @GHC.Num.Integer.Integer
+                               totalAllocation
+                        of x1 [Occ=Once1]
+                        { __DEFAULT ->
+                        case case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                    @GHC.Num.Integer.Integer
+                                    timestamp
+                             of x1 [Occ=Once1]
+                             { __DEFAULT ->
+                             case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                    @GHC.Num.Integer.Integer
+                                    startTimestamp
+                             of y1 [Occ=Once1]
+                             { __DEFAULT ->
+                             PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                             }
+                             }
+                        of y1 [Occ=Once1]
+                        { __DEFAULT ->
+                        PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                        }
+                        })
+                       (PlutusTx.Plugin.Utils.anchor
+                          @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                          @GHC.Num.Integer.Integer
+                          x)
+                 };
+               GHC.Types.True ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                   @GHC.Num.Integer.Integer
+                   totalAllocation
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 0#
+         }
+         }
+         }
+Context: Compiling code:
+         case timestamp of timestamp { __DEFAULT ->
+         case PlutusTx.Builtins.Internal.lessThanInteger
+                timestamp startTimestamp
+         of {
+           GHC.Types.False ->
+             case case PlutusTx.Builtins.Internal.addInteger
+                         startTimestamp duration
+                  of y1 [Occ=Once1]
+                  { __DEFAULT ->
+                  PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                  }
+             of {
+               GHC.Types.False ->
+                 case GHC.Base.build
+                        @GHC.Num.Integer.Integer
+                        (\ (@b)
+                           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                           (n [Occ=Once1, OS=OneShot] :: b) ->
+                           GHC.Enum.enumDeltaToInteger1FB
+                             @b
+                             c
+                             n
+                             (GHC.Num.Integer.IS 1#)
+                             (PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                @GHC.Num.Integer.Integer
+                                duration))
+                 of {
+                   [] -> GHC.Num.Integer.IS 0#;
+                   : x [Occ=Once1] _ [Occ=Dead] ->
+                     PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                       @(GHC.Num.Integer.Integer
+                         -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                       PlutusTx.Builtins.divideInteger
+                       (case PlutusTx.Plugin.Utils.anchor
+                               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                               @GHC.Num.Integer.Integer
+                               totalAllocation
+                        of x1 [Occ=Once1]
+                        { __DEFAULT ->
+                        case case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                    @GHC.Num.Integer.Integer
+                                    timestamp
+                             of x1 [Occ=Once1]
+                             { __DEFAULT ->
+                             case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                    @GHC.Num.Integer.Integer
+                                    startTimestamp
+                             of y1 [Occ=Once1]
+                             { __DEFAULT ->
+                             PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                             }
+                             }
+                        of y1 [Occ=Once1]
+                        { __DEFAULT ->
+                        PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                        }
+                        })
+                       (PlutusTx.Plugin.Utils.anchor
+                          @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                          @GHC.Num.Integer.Integer
+                          x)
+                 };
+               GHC.Types.True ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                   @GHC.Num.Integer.Integer
+                   totalAllocation
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 0#
+         }
+         }
+Context: Compiling code:
+         case PlutusTx.Builtins.Internal.lessThanInteger
+                timestamp startTimestamp
+         of {
+           GHC.Types.False ->
+             case case PlutusTx.Builtins.Internal.addInteger
+                         startTimestamp duration
+                  of y1 [Occ=Once1]
+                  { __DEFAULT ->
+                  PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+                  }
+             of {
+               GHC.Types.False ->
+                 case GHC.Base.build
+                        @GHC.Num.Integer.Integer
+                        (\ (@b)
+                           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                           (n [Occ=Once1, OS=OneShot] :: b) ->
+                           GHC.Enum.enumDeltaToInteger1FB
+                             @b
+                             c
+                             n
+                             (GHC.Num.Integer.IS 1#)
+                             (PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                                @GHC.Num.Integer.Integer
+                                duration))
+                 of {
+                   [] -> GHC.Num.Integer.IS 0#;
+                   : x [Occ=Once1] _ [Occ=Dead] ->
+                     PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                       @(GHC.Num.Integer.Integer
+                         -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                       PlutusTx.Builtins.divideInteger
+                       (case PlutusTx.Plugin.Utils.anchor
+                               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                               @GHC.Num.Integer.Integer
+                               totalAllocation
+                        of x1 [Occ=Once1]
+                        { __DEFAULT ->
+                        case case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                    @GHC.Num.Integer.Integer
+                                    timestamp
+                             of x1 [Occ=Once1]
+                             { __DEFAULT ->
+                             case PlutusTx.Plugin.Utils.anchor
+                                    @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                    @GHC.Num.Integer.Integer
+                                    startTimestamp
+                             of y1 [Occ=Once1]
+                             { __DEFAULT ->
+                             PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                             }
+                             }
+                        of y1 [Occ=Once1]
+                        { __DEFAULT ->
+                        PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                        }
+                        })
+                       (PlutusTx.Plugin.Utils.anchor
+                          @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                          @GHC.Num.Integer.Integer
+                          x)
+                 };
+               GHC.Types.True ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+                   @GHC.Num.Integer.Integer
+                   totalAllocation
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 0#
+         }
+Context: Creating alternative: GHC.Types.False
+Context: Compiling code:
+         case case PlutusTx.Builtins.Internal.addInteger
+                     startTimestamp duration
+              of y1 [Occ=Once1]
+              { __DEFAULT ->
+              PlutusTx.Builtins.Internal.lessThanInteger y1 timestamp
+              }
+         of {
+           GHC.Types.False ->
+             case GHC.Base.build
+                    @GHC.Num.Integer.Integer
+                    (\ (@b)
+                       (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                       (n [Occ=Once1, OS=OneShot] :: b) ->
+                       GHC.Enum.enumDeltaToInteger1FB
+                         @b
+                         c
+                         n
+                         (GHC.Num.Integer.IS 1#)
+                         (PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                            @GHC.Num.Integer.Integer
+                            duration))
+             of {
+               [] -> GHC.Num.Integer.IS 0#;
+               : x [Occ=Once1] _ [Occ=Dead] ->
+                 PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+                   @(GHC.Num.Integer.Integer
+                     -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+                   PlutusTx.Builtins.divideInteger
+                   (case PlutusTx.Plugin.Utils.anchor
+                           @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                           @GHC.Num.Integer.Integer
+                           totalAllocation
+                    of x1 [Occ=Once1]
+                    { __DEFAULT ->
+                    case case PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                                @GHC.Num.Integer.Integer
+                                timestamp
+                         of x1 [Occ=Once1]
+                         { __DEFAULT ->
+                         case PlutusTx.Plugin.Utils.anchor
+                                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                                @GHC.Num.Integer.Integer
+                                startTimestamp
+                         of y1 [Occ=Once1]
+                         { __DEFAULT ->
+                         PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                         }
+                         }
+                    of y1 [Occ=Once1]
+                    { __DEFAULT ->
+                    PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                    }
+                    })
+                   (PlutusTx.Plugin.Utils.anchor
+                      @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                      @GHC.Num.Integer.Integer
+                      x)
+             };
+           GHC.Types.True ->
+             PlutusTx.Plugin.Utils.anchor
+               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL154\NUL45\NUL154\NUL60"
+               @GHC.Num.Integer.Integer
+               totalAllocation
+         }
+Context: Creating alternative: GHC.Types.False
+Context: Compiling code:
+         case GHC.Base.build
+                @GHC.Num.Integer.Integer
+                (\ (@b)
+                   (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+                   (n [Occ=Once1, OS=OneShot] :: b) ->
+                   GHC.Enum.enumDeltaToInteger1FB
+                     @b
+                     c
+                     n
+                     (GHC.Num.Integer.IS 1#)
+                     (PlutusTx.Plugin.Utils.anchor
+                        @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                        @GHC.Num.Integer.Integer
+                        duration))
+         of {
+           [] -> GHC.Num.Integer.IS 0#;
+           : x [Occ=Once1] _ [Occ=Dead] ->
+             PlutusTx.Plugin.Utils.anchor
+               @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL18\NUL157\NUL24"
+               @(GHC.Num.Integer.Integer
+                 -> GHC.Num.Integer.Integer -> GHC.Num.Integer.Integer)
+               PlutusTx.Builtins.divideInteger
+               (case PlutusTx.Plugin.Utils.anchor
+                       @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL26\NUL157\NUL41"
+                       @GHC.Num.Integer.Integer
+                       totalAllocation
+                of x1 [Occ=Once1]
+                { __DEFAULT ->
+                case case PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL45\NUL157\NUL54"
+                            @GHC.Num.Integer.Integer
+                            timestamp
+                     of x1 [Occ=Once1]
+                     { __DEFAULT ->
+                     case PlutusTx.Plugin.Utils.anchor
+                            @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL57\NUL157\NUL71"
+                            @GHC.Num.Integer.Integer
+                            startTimestamp
+                     of y1 [Occ=Once1]
+                     { __DEFAULT ->
+                     PlutusTx.Builtins.Internal.subtractInteger x1 y1
+                     }
+                     }
+                of y1 [Occ=Once1]
+                { __DEFAULT ->
+                PlutusTx.Builtins.Internal.multiplyInteger x1 y1
+                }
+                })
+               (PlutusTx.Plugin.Utils.anchor
+                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL157\NUL74\NUL157\NUL75"
+                  @GHC.Num.Integer.Integer
+                  x)
+         }
+Context: Compiling code:
+         GHC.Base.build
+           @GHC.Num.Integer.Integer
+           (\ (@b)
+              (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+              (n [Occ=Once1, OS=OneShot] :: b) ->
+              GHC.Enum.enumDeltaToInteger1FB
+                @b
+                c
+                n
+                (GHC.Num.Integer.IS 1#)
+                (PlutusTx.Plugin.Utils.anchor
+                   @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                   @GHC.Num.Integer.Integer
+                   duration))
+Context: Compiling code:
+         \ (@b)
+           (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+           (n [Occ=Once1, OS=OneShot] :: b) ->
+           GHC.Enum.enumDeltaToInteger1FB
+             @b
+             c
+             n
+             (GHC.Num.Integer.IS 1#)
+             (PlutusTx.Plugin.Utils.anchor
+                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                @GHC.Num.Integer.Integer
+                duration)
+Context: Compiling code:
+         \ (c [Occ=Once1, OS=OneShot] :: GHC.Num.Integer.Integer -> b -> b)
+           (n [Occ=Once1, OS=OneShot] :: b) ->
+           GHC.Enum.enumDeltaToInteger1FB
+             @b
+             c
+             n
+             (GHC.Num.Integer.IS 1#)
+             (PlutusTx.Plugin.Utils.anchor
+                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                @GHC.Num.Integer.Integer
+                duration)
+Context: Compiling code:
+         \ (n [Occ=Once1, OS=OneShot] :: b) ->
+           GHC.Enum.enumDeltaToInteger1FB
+             @b
+             c
+             n
+             (GHC.Num.Integer.IS 1#)
+             (PlutusTx.Plugin.Utils.anchor
+                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+                @GHC.Num.Integer.Integer
+                duration)
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB
+           @b
+           c
+           n
+           (GHC.Num.Integer.IS 1#)
+           (PlutusTx.Plugin.Utils.anchor
+              @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E39-UnsupportedRangeSyntax/Plinth.hs\NUL155\NUL28\NUL155\NUL36"
+              @GHC.Num.Integer.Integer
+              duration)
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB @b c n (GHC.Num.Integer.IS 1#)
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB @b c n
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB @b c
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB @b
+Context: Compiling code:
+         GHC.Enum.enumDeltaToInteger1FB
+Error: Unsupported feature: Use of enumFromTo or enumFromThenTo, possibly via range syntax. Please use PlutusTx.Enum.enumFromTo or PlutusTx.Enum.enumFromThenTo instead.
+    |ᴾᴸᴵᴺᵀᴴ
+197 |      linearVesting startTimestamp duration amount txEarliestTime
+    |      ^^^^^^^^^^^^^

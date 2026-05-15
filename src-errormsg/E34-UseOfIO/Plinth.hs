@@ -1,21 +1,25 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:preserve-source-locations #-}
 
 module E34Plinth where
 
-import PlutusTx (CompiledCode, compile)
+import Plinth.Plugin (plinthc)
+import qualified PlutusTx
 import PlutusTx.Prelude
 import System.IO (putStrLn)
+import System.IO.Unsafe (unsafePerformIO)
 import qualified Prelude as Haskell
 
-{-# INLINEABLE logIt #-}
-logIt :: Integer -> Haskell.IO ()
-logIt n = putStrLn (Haskell.show n)
+-- BUG: embeds an `IO` action inside otherwise-pure code via
+-- `unsafePerformIO`. The Plinth plugin's typecheck-stage
+-- `injectUnsupportedMarkers` pass spots the `IO`-typed sub-expression
+-- and emits its custom diagnostic: "IO actions are not supported in
+-- Plinth".
+{-# INLINEABLE addWithLog #-}
+addWithLog :: Integer -> Integer -> Integer
+addWithLog x y = x + unsafePerformIO (putStrLn "computing" Haskell.>> Haskell.pure y)
 
--- BUG: IO has no representation in Plutus IR — the plugin cannot
--- compile any IO action (and `putStrLn`/`show` would fail on their own
--- as well, both being base methods without on-chain equivalents)
-compiledLog :: CompiledCode (Integer -> Haskell.IO ())
-compiledLog = $$(compile [||logIt||])
+compiledAddWithLog :: PlutusTx.CompiledCode (Integer -> Integer -> Integer)
+compiledAddWithLog = plinthc addWithLog

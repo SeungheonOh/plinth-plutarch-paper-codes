@@ -1,0 +1,24 @@
+# source: src/Vesting/Contracts/VestingPlinth.hs
+#
+# Bug: linearVesting refactored to defend against duration=0 with a
+# `case duration of 0 -> ...; _ -> ...`. The literal-pattern `0`
+# desugars through `Eq Integer` from base; the Plinth plugin rejects
+# Integer pattern matching with its custom `integerCaseError`.
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Contracts/VestingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -152,7 +152,9 @@
+ linearVesting startTimestamp duration totalAllocation timestamp
+   | timestamp < startTimestamp = 0
+   | timestamp > startTimestamp + duration = totalAllocation
+-  | otherwise = divide (totalAllocation * (timestamp - startTimestamp)) duration
++  | otherwise = case duration of
++      0 -> 0
++      d -> divide (totalAllocation * (timestamp - startTimestamp)) d
+
+ -- ============================================================================
+ -- 4. Main validator logic

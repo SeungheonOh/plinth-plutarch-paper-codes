@@ -1,6 +1,6 @@
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E21-WrongPreludeFunction/Plinth.hs:15:15: error: [GHC-88464]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E21-WrongPreludeFunction/Plinth.hs:16:15: error: [GHC-88464]
     Variable not in scope: length :: List Integer -> Integer
    |
-15 | myLength xs = length xs
+16 | myLength xs = length xs
    |               ^^^^^^

@@ -1,0 +1,41 @@
+# source: src/Vesting/Contracts/VestingPlinth.hs
+#
+# Bug: user adds a "label" helper returning `Data.Text.Text` (because
+# that's the standard string type they reach for from everyday
+# Haskell) and references it from the validator's main && chain. The
+# Plinth plugin's `unsupportedTypes` table catches `Text` and emits a
+# custom message pointing the user at `BuiltinString`.
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Contracts/VestingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -29,6 +29,7 @@
+ import UntypedPlutusCore qualified as UPLC
+
+ import Vesting.Types.VestingState
++import Data.Text (Text)
+
+ -- ============================================================================
+ -- 1. Infrastructure
+@@ -146,6 +147,10 @@
+ -- 3. Linear vesting formula
+ -- ============================================================================
+
++{-# INLINEABLE statusLabel #-}
++statusLabel :: Bool -> Text
++statusLabel _ = "ok"
++
+ {-# INLINEABLE linearVesting #-}
+ linearVesting :: Integer -> Integer -> Integer -> Integer -> Integer
+ linearVesting startTimestamp duration totalAllocation timestamp
+@@ -185,6 +190,7 @@
+     , txInfoOutputs = outputs
+     } =
+     if mustBeSignedBy sigs beneficiary
++      && (case statusLabel True of _ -> True)
+       && let ownInput = findOwnInput ownRef inputs
+              ownResolved = txInInfoResolved ownInput
+              TxOut ownAddress ownValue _ _ = ownResolved

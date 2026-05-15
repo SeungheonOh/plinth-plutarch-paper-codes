@@ -1,3 +1,12 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+Plinth Compilation Error:
+Context: Compiling code at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E33-UseOfShow/Plinth.hs:21:20-48:
+         E33Plinth.renderInteger
+Context: Compiling type: GHC.Num.Integer.Integer -> GHC.Base.String
+Context: Compiling type: GHC.Base.String
+Context: Compiling type: GHC.Types.Char
+Context: Compiling data constructor type: GHC.Types.C#
+Context: Compiling type: GHC.Prim.Char#
+Error: Unsupported feature: Type constructor: GHC.Prim.Char#
+   |ᴾᴸᴵᴺᵀᴴ
+21 | compiledRender = $$(compile [||renderInteger||])
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

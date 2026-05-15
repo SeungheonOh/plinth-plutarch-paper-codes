@@ -1,3 +1,13 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E19-WrongFieldCount/Plinth.hs:29:3: error:
+    • The constructor ‘Joint’ should have 2 arguments, but has been given 1
+    • In the pattern: Joint x
+      In a case alternative: Joint x -> netWithdraw x
+      In the expression:
+        case w of
+          Amount n -> n
+          Joint x -> netWithdraw x
+          Deduct n from -> netWithdraw from - n
+   |
+29 |   Joint x -> netWithdraw x
+   |   ^^^^^^^

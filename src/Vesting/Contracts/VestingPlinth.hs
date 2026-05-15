@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-callsite-growth=20 #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:inline-unconditional-growth=20 #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:no-preserve-logging #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:preserve-source-locations #-}
 
 module Vesting.Contracts.VestingPlinth (
   plinthVestingScript,

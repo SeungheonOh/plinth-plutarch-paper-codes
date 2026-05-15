@@ -1,3 +1,16 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E17-MissingBaseCase/Plinth.hs:8:1: warning: [-Wunused-imports]
+    The import of ‘PlutusTx.Prelude’ is redundant
+      except perhaps to import instances from ‘PlutusTx.Prelude’
+    To import instances alone, use: import PlutusTx.Prelude()
+  |
+8 | import PlutusTx.Prelude
+  | ^^^^^^^^^^^^^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E17-MissingBaseCase/Plinth.hs:16:1: warning: [GHC-62161] [-Wincomplete-patterns]
+    Pattern match(es) are non-exhaustive
+    In an equation for ‘foldList’:
+        Patterns of type ‘b -> a -> b’, ‘b’, ‘List a’ not matched: _ _ Nil
+   |
+16 | foldList f acc (Cons x rest) = foldList f (f acc x) rest
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

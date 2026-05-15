@@ -1,0 +1,41 @@
+# source: src/Vesting/Contracts/VestingPlinth.hs
+#
+# Bug: user adds a "version check" helper using Haskell's `Int`
+# (because that's what they reach for from everyday Haskell) and
+# threads it through the validator's main && chain. The Plinth
+# plugin's special case for `Int` in `compileTyCon` emits its
+# focused custom message: "Int: use Integer instead".
+#
+# Apply with:
+#   cp <repo>/src/Vesting/Contracts/VestingPlinth.hs <case>/Plinth.hs
+#   (cd <case> && patch -p1 < Plinth.patch)
+#
+--- a/Plinth.hs
++++ b/Plinth.hs
+@@ -29,6 +29,7 @@
+ import UntypedPlutusCore qualified as UPLC
+
+ import Vesting.Types.VestingState
++import qualified Prelude as Haskell
+
+ -- ============================================================================
+ -- 1. Infrastructure
+@@ -146,6 +147,10 @@
+ -- 3. Linear vesting formula
+ -- ============================================================================
+
++{-# INLINEABLE versionOk #-}
++versionOk :: Haskell.Int -> Bool
++versionOk _ = True
++
+ {-# INLINEABLE linearVesting #-}
+ linearVesting :: Integer -> Integer -> Integer -> Integer -> Integer
+ linearVesting startTimestamp duration totalAllocation timestamp
+@@ -185,6 +190,7 @@
+     , txInfoOutputs = outputs
+     } =
+     if mustBeSignedBy sigs beneficiary
++      && versionOk 1
+       && let ownInput = findOwnInput ownRef inputs
+              ownResolved = txInInfoResolved ownInput
+              TxOut ownAddress ownValue _ _ = ownResolved

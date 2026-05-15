@@ -1,3 +1,20 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E35-UseOfString/Plinth.hs:10:1: warning: [-Wunused-imports]
+    The import of ‘PlutusTx.Prelude’ is redundant
+      except perhaps to import instances from ‘PlutusTx.Prelude’
+    To import instances alone, use: import PlutusTx.Prelude()
+   |
+10 | import PlutusTx.Prelude
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+Plinth Compilation Error:
+Context: Compiling code at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E35-UseOfString/Plinth.hs:21:19-39:
+         E35Plinth.greet
+Context: Compiling type: GHC.Base.String -> GHC.Base.String
+Context: Compiling type: GHC.Base.String
+Context: Compiling type: GHC.Types.Char
+Context: Compiling data constructor type: GHC.Types.C#
+Context: Compiling type: GHC.Prim.Char#
+Error: Unsupported feature: Type constructor: GHC.Prim.Char#
+   |ᴾᴸᴵᴺᵀᴴ
+21 | compiledGreet = $$(compile [||greet||])
+   |                   ^^^^^^^^^^^^^^^^^^^^^

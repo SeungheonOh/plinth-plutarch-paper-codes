@@ -65,12 +65,16 @@ compile_one() {
 filter_log() {
   local in="$1"
   local out="$2"
+  # The Plinth plugin emits SGR escapes around its caret underlines even
+  # when -fdiagnostics-color=never is passed; strip them so .err files
+  # stay diffable.
   sed -E \
     -e '/^Using saved setting/d' \
     -e '/^Configuration is affected by/d' \
     -e "/^'\\/Users.*cabal.project'/d" \
     -e '/^Loaded package environment from/d' \
     -e '/^warning: Git tree/d' \
+    -e $'s/\x1b\\[[0-9;]*[A-Za-z]//g' \
     "$in" > "$out"
 }
 

@@ -6,6 +6,7 @@
 {-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:conservative-optimisation #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:optimize #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:preserve-source-locations #-}
 {-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:target-version=1.1.0 #-}
 
 module Hydra.Contracts.HeadPlinth (

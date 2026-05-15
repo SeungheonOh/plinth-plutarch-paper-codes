@@ -1,3 +1,11 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E06-ApplyNonFunction/Plinth.hs:28:15: error: [GHC-83865]
+    • Couldn't match expected type ‘t0 -> Integer’
+                  with actual type ‘Integer’
+    • The function ‘n’ is applied to one value argument,
+        but its type ‘Integer’ has none
+      In the expression: n 42
+      In a case alternative: Amount n -> n 42
+   |
+28 |   Amount n -> n 42
+   |               ^^^^

@@ -1,5 +1,5 @@
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E21-WrongPreludeFunction/Plutarch.hs:110:43-44: error: [GHC-83865]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E21-WrongPreludeFunction/Plutarch.hs:110:43-44: error: [GHC-83865]
     • Couldn't match type ‘PUserList’ with ‘list0 a0’
       Expected: Term s (list0 a0)
         Actual: Term s PUserList

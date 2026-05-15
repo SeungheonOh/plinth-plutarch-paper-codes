@@ -1,3 +1,20 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E20-ListOpConfusion/Plinth.hs:17:22: error: [GHC-25897]
+    • Couldn't match expected type ‘a’ with actual type ‘List a’
+      ‘a’ is a rigid type variable bound by
+        the type signature for:
+          prepend :: forall a. List a -> List a -> List a
+        at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E20-ListOpConfusion/Plinth.hs:16:1-37
+    • In the first argument of ‘Cons’, namely ‘xs’
+      In the expression: Cons xs ys
+      In an equation for ‘prepend’: prepend xs ys = Cons xs ys
+    • Relevant bindings include
+        ys :: List a
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E20-ListOpConfusion/Plinth.hs:17:12)
+        xs :: List a
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E20-ListOpConfusion/Plinth.hs:17:9)
+        prepend :: List a -> List a -> List a
+          (bound at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E20-ListOpConfusion/Plinth.hs:17:1)
+   |
+17 | prepend xs ys = Cons xs ys
+   |                      ^^

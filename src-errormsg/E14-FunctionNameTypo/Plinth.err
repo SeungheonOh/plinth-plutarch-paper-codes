@@ -1,3 +1,8 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E14-FunctionNameTypo/Plinth.hs:28:17: error: [GHC-88464]
+    Variable not in scope: modul :: Integer -> t0 -> Integer
+    Suggested fix:
+      Perhaps use ‘modulo’ (imported from PlutusTx.Prelude)
+   |
+28 |   Amount n -> n `modul` 2
+   |                 ^^^^^^^

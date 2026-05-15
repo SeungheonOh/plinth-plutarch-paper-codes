@@ -1,32 +1,32 @@
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E27-UnsupportedGADTs/Plinth.hs:121:3-24: warning: [-Wunused-top-binds]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E27-UnsupportedGADTs/Plinth.hs:122:3-24: warning: [-Wunused-top-binds]
     Defined but not used: data constructor ‘TagInt’
     |
-121 |   TagInt  :: Tag Integer
+122 |   TagInt  :: Tag Integer
     |   ^^^^^^^^^^^^^^^^^^^^^^
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E27-UnsupportedGADTs/Plinth.hs:122:3-21: warning: [-Wunused-top-binds]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E27-UnsupportedGADTs/Plinth.hs:123:3-21: warning: [-Wunused-top-binds]
     Defined but not used: data constructor ‘TagBool’
     |
-122 |   TagBool :: Tag Bool
+123 |   TagBool :: Tag Bool
     |   ^^^^^^^^^^^^^^^^^^^
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E27-UnsupportedGADTs/Plinth.hs:125:1-6: warning: [-Wunused-top-binds]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E27-UnsupportedGADTs/Plinth.hs:126:1-6: warning: [-Wunused-top-binds]
     Defined but not used: ‘useTag’
     |
-125 | useTag TagInt = 1
+126 | useTag TagInt = 1
     | ^^^^^^
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E27-UnsupportedGADTs/Plinth.hs:129:1-10: warning: [-Wunused-top-binds]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E27-UnsupportedGADTs/Plinth.hs:130:1-10: warning: [-Wunused-top-binds]
     Defined but not used: ‘buggyEntry’
     |
-129 | buggyEntry _ = if useTag TagInt == 1 then () else error ()
+130 | buggyEntry _ = if useTag TagInt == 1 then () else error ()
     | ^^^^^^^^^^
 
-/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-top8/E27-UnsupportedGADTs/Plinth.hs:132:1-17: warning: [-Wunused-top-binds]
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg-validators/E27-UnsupportedGADTs/Plinth.hs:133:1-17: warning: [-Wunused-top-binds]
     Defined but not used: ‘plinthBuggyScript’
     |
-132 | plinthBuggyScript =
+133 | plinthBuggyScript =
     | ^^^^^^^^^^^^^^^^^
 Plinth Compilation Error:
 Error: Unsupported feature: Following extensions are not supported: GADTs

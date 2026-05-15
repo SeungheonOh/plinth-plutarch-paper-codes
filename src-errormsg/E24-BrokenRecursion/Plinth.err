@@ -1,3 +1,33 @@
-<command line>: Ambiguous module name ‘Plinth.Plugin’:
-  it was found in multiple packages:
-  plutus-tx-plugin-1.64.0.0 plutus-tx-plugin-1.64.0.0
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plinth.hs:30:16: error: [GHC-83865]
+    • Couldn't match expected type ‘Withdraw -> Integer’
+                  with actual type ‘Withdraw’
+    • The function ‘netWithdraw’ is applied to one value argument,
+        but its type ‘Withdraw’ has none
+      In the first argument of ‘(+)’, namely ‘netWithdraw x’
+      In the expression: netWithdraw x + netWithdraw y
+   |
+30 |   Joint x y -> netWithdraw x + netWithdraw y
+   |                ^^^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plinth.hs:30:32: error: [GHC-83865]
+    • Couldn't match expected type ‘Withdraw -> Integer’
+                  with actual type ‘Withdraw’
+    • The function ‘netWithdraw’ is applied to one value argument,
+        but its type ‘Withdraw’ has none
+      In the second argument of ‘(+)’, namely ‘netWithdraw y’
+      In the expression: netWithdraw x + netWithdraw y
+   |
+30 |   Joint x y -> netWithdraw x + netWithdraw y
+   |                                ^^^^^^^^^^^^^
+
+/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E24-BrokenRecursion/Plinth.hs:31:20: error: [GHC-83865]
+    • Couldn't match expected type ‘Withdraw -> Integer’
+                  with actual type ‘Withdraw’
+    • The function ‘netWithdraw’ is applied to one value argument,
+        but its type ‘Withdraw’ has none
+      In the first argument of ‘(-)’, namely ‘netWithdraw from’
+      In the expression: netWithdraw from - n
+   |
+31 |   Deduct n from -> netWithdraw from - n
+   |                    ^^^^^^^^^^^^^^^^

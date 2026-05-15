@@ -1,6 +1,8 @@
-# Per-case build artifacts produced by collect-errors.sh
+# Per-case build artifacts produced by run.sh / collect-errors.sh
 */.build/
 *.hi
 *.o
 *.dyn_hi
 *.dyn_o
+# `patch` backups produced when run.sh re-applies a Plinth/Plutarch.patch
+*.hs.orig

@@ -1,0 +1,186 @@
+Plinth Compilation Error:
+Context: Compiling code at /Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E36-IntegerLiteralPattern/Plinth.hs:27:22-47:
+         E36Plinth.classify
+Context: Compiling code:
+         \ (n [Occ=Once1] :: GHC.Num.Integer.Integer) ->
+           case n of n [Occ=Once1] { __DEFAULT ->
+           case PlutusTx.Plugin.Utils.anchor
+                  @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E36-IntegerLiteralPattern/Plinth.hs\NUL21\NUL19\NUL21\NUL20"
+                  @GHC.Num.Integer.Integer
+                  n
+           of ds_d6j3
+           { __DEFAULT ->
+           case case ds_d6j3 of {
+                  GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                    GHC.Prim.tagToEnum#
+                      @GHC.Types.Bool
+                      (case x1 of {
+                         __DEFAULT -> 0#;
+                         0# -> 1#
+                       });
+                  GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                  GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+                }
+           of {
+             GHC.Types.False ->
+               case case ds_d6j3 of {
+                      GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                        GHC.Prim.tagToEnum#
+                          @GHC.Types.Bool
+                          (case x1 of {
+                             __DEFAULT -> 0#;
+                             1# -> 1#
+                           });
+                      GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                      GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+                    }
+               of {
+                 GHC.Types.False -> GHC.Num.Integer.IS 300#;
+                 GHC.Types.True -> GHC.Num.Integer.IS 200#
+               };
+             GHC.Types.True -> GHC.Num.Integer.IS 100#
+           }
+           }
+           }
+Context: Compiling code:
+         case n of n [Occ=Once1] { __DEFAULT ->
+         case PlutusTx.Plugin.Utils.anchor
+                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E36-IntegerLiteralPattern/Plinth.hs\NUL21\NUL19\NUL21\NUL20"
+                @GHC.Num.Integer.Integer
+                n
+         of ds_d6j3
+         { __DEFAULT ->
+         case case ds_d6j3 of {
+                GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                  GHC.Prim.tagToEnum#
+                    @GHC.Types.Bool
+                    (case x1 of {
+                       __DEFAULT -> 0#;
+                       0# -> 1#
+                     });
+                GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+              }
+         of {
+           GHC.Types.False ->
+             case case ds_d6j3 of {
+                    GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                      GHC.Prim.tagToEnum#
+                        @GHC.Types.Bool
+                        (case x1 of {
+                           __DEFAULT -> 0#;
+                           1# -> 1#
+                         });
+                    GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                    GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+                  }
+             of {
+               GHC.Types.False -> GHC.Num.Integer.IS 300#;
+               GHC.Types.True -> GHC.Num.Integer.IS 200#
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 100#
+         }
+         }
+         }
+Context: Compiling code:
+         case PlutusTx.Plugin.Utils.anchor
+                @"/Users/sho/io/plinth-plutarch-paper-code/src-errormsg/E36-IntegerLiteralPattern/Plinth.hs\NUL21\NUL19\NUL21\NUL20"
+                @GHC.Num.Integer.Integer
+                n
+         of ds_d6j3
+         { __DEFAULT ->
+         case case ds_d6j3 of {
+                GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                  GHC.Prim.tagToEnum#
+                    @GHC.Types.Bool
+                    (case x1 of {
+                       __DEFAULT -> 0#;
+                       0# -> 1#
+                     });
+                GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+              }
+         of {
+           GHC.Types.False ->
+             case case ds_d6j3 of {
+                    GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                      GHC.Prim.tagToEnum#
+                        @GHC.Types.Bool
+                        (case x1 of {
+                           __DEFAULT -> 0#;
+                           1# -> 1#
+                         });
+                    GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                    GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+                  }
+             of {
+               GHC.Types.False -> GHC.Num.Integer.IS 300#;
+               GHC.Types.True -> GHC.Num.Integer.IS 200#
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 100#
+         }
+         }
+Context: Compiling code:
+         case case ds_d6j3 of {
+                GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                  GHC.Prim.tagToEnum#
+                    @GHC.Types.Bool
+                    (case x1 of {
+                       __DEFAULT -> 0#;
+                       0# -> 1#
+                     });
+                GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+              }
+         of {
+           GHC.Types.False ->
+             case case ds_d6j3 of {
+                    GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+                      GHC.Prim.tagToEnum#
+                        @GHC.Types.Bool
+                        (case x1 of {
+                           __DEFAULT -> 0#;
+                           1# -> 1#
+                         });
+                    GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+                    GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+                  }
+             of {
+               GHC.Types.False -> GHC.Num.Integer.IS 300#;
+               GHC.Types.True -> GHC.Num.Integer.IS 200#
+             };
+           GHC.Types.True -> GHC.Num.Integer.IS 100#
+         }
+Context: Compiling code:
+         case ds_d6j3 of {
+           GHC.Num.Integer.IS x1 [Occ=Once1!] ->
+             GHC.Prim.tagToEnum#
+               @GHC.Types.Bool
+               (case x1 of {
+                  __DEFAULT -> 0#;
+                  0# -> 1#
+                });
+           GHC.Num.Integer.IP _ [Occ=Dead] -> GHC.Types.False;
+           GHC.Num.Integer.IN _ [Occ=Dead] -> GHC.Types.False
+         }
+Context: Creating instantiated matcher for type: GHC.Num.Integer.Integer
+Error: Unsupported feature: Cannot pattern match on a value of type 'Integer'.
+
+       This usually happens when pattern matching on an integer literal,
+       for example:
+
+         f 42 = ...
+         f n  = ...
+
+       Plinth does not support pattern matching on 'Integer'. Use equality
+       from 'PlutusTx.Prelude' instead, for example:
+
+         import PlutusTx.Prelude ((==))
+
+         f n | n == 42   = ...
+             | otherwise = ...
+
+       Note: GHC can generate these unexpectedly, you may need '-fno-strictness', '-fno-specialise', '-fno-spec-constr', '-fno-unbox-strict-fields', or '-fno-unbox-small-strict-fields'.
+   |ᴾᴸᴵᴺᵀᴴ
+27 | compiledClassify = $$(compile [|| classify ||])
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^

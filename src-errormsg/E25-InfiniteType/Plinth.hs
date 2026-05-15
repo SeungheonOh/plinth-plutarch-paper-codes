@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-export-lists -Wno-missing-deriving-strategies #-}
 {-# OPTIONS_GHC -fplugin Plinth.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt Plinth.Plugin:preserve-source-locations #-}
 
 module E25Plinth where
 
