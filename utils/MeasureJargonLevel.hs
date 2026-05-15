@@ -176,6 +176,7 @@ data FileResult = FileResult
   , frImportLines :: !Int
   , frCommentLines :: !Int
   , frEloc :: !Int
+  , frTokens :: !Int
   , frJargon :: !JargonCounts
   }
 
@@ -186,6 +187,10 @@ analyze side path = do
       rawLines = lines raw
       totalLines = length rawLines
       blankLines = length (filter (all (== ' ')) rawLines)
+      -- Source-code "tokens" per the paper methodology: whitespace-separated
+      -- words across the entire source file. `words` splits on any whitespace
+      -- (spaces and newlines included).
+      tokens = length (words raw)
       mode = parseMode path
   case parseFileContentsWithComments mode src of
     ParseFailed loc msg ->
@@ -214,6 +219,7 @@ analyze side path = do
           , frImportLines = importLines
           , frCommentLines = commentLineCount
           , frEloc = eloc
+          , frTokens = tokens
           , frJargon = jc
           }
     ParseOk _ ->
@@ -310,10 +316,22 @@ printPair Pair{..} = do
     (frEloc ft)
     (ratioStr (frEloc ft) (frEloc fp))
   printf
+    "  %-26s  %10d  %10d  %10s\n"
+    ("Source tokens (denom)" :: String)
+    (frTokens fp)
+    (frTokens ft)
+    (ratioStr (frTokens ft) (frTokens fp))
+  printf
     "  %-26s  %10s  %10s  %10s\n"
     ("Jargon density (per eLOC)" :: String)
     (densityStr pTotal (frEloc fp))
     (densityStr tTotal (frEloc ft))
+    ("" :: String)
+  printf
+    "  %-26s  %10s  %10s  %10s\n"
+    ("Jargon density (per token)" :: String)
+    (densityStr pTotal (frTokens fp))
+    (densityStr tTotal (frTokens ft))
     ("" :: String)
 
   putStrLn ""
@@ -344,42 +362,50 @@ printSummary :: [(String, FileResult, FileResult)] -> IO ()
 printSummary rows = do
   putStrLn ""
   putStrLn "Summary: source program jargon level"
-  putStrLn (replicate 86 '=')
+  putStrLn (replicate 110 '=')
   printf
-    "  %-18s | %10s | %10s | %8s | %10s | %10s\n"
+    "  %-18s | %10s | %10s | %8s | %10s | %10s | %10s | %10s\n"
     ("Validator" :: String)
     ("Plutarch" :: String)
     ("Plinth" :: String)
     ("ratio" :: String)
     ("plut/eLOC" :: String)
     ("plin/eLOC" :: String)
-  putStrLn (replicate 86 '-')
+    ("plut/tok" :: String)
+    ("plin/tok" :: String)
+  putStrLn (replicate 110 '-')
   let summarizeRow (n, fp, ft) = do
         let p = jcTotal (frJargon fp)
             t = jcTotal (frJargon ft)
         printf
-          "  %-18s | %10d | %10d | %8s | %10s | %10s\n"
+          "  %-18s | %10d | %10d | %8s | %10s | %10s | %10s | %10s\n"
           n
           p
           t
           (ratioStr t p)
           (densityStr p (frEloc fp))
           (densityStr t (frEloc ft))
+          (densityStr p (frTokens fp))
+          (densityStr t (frTokens ft))
   mapM_ summarizeRow rows
-  putStrLn (replicate 86 '-')
+  putStrLn (replicate 110 '-')
   let totalP = sum [jcTotal (frJargon fp) | (_, fp, _) <- rows]
       totalT = sum [jcTotal (frJargon ft) | (_, _, ft) <- rows]
       totalPEloc = sum [frEloc fp | (_, fp, _) <- rows]
       totalTEloc = sum [frEloc ft | (_, _, ft) <- rows]
+      totalPTokens = sum [frTokens fp | (_, fp, _) <- rows]
+      totalTTokens = sum [frTokens ft | (_, _, ft) <- rows]
   printf
-    "  %-18s | %10d | %10d | %8s | %10s | %10s\n"
+    "  %-18s | %10d | %10d | %8s | %10s | %10s | %10s | %10s\n"
     ("TOTAL" :: String)
     totalP
     totalT
     (ratioStr totalT totalP)
     (densityStr totalP totalPEloc)
     (densityStr totalT totalTEloc)
-  putStrLn (replicate 86 '=')
+    (densityStr totalP totalPTokens)
+    (densityStr totalT totalTTokens)
+  putStrLn (replicate 110 '=')
 
   putStrLn ""
   putStrLn "Per-category aggregate"

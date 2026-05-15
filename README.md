@@ -39,22 +39,22 @@ Toolchain: Plinth `1.64.0.0`, Plutarch `1.12.0`, GHC `9.6.6`. All ratios are **P
 
 ### Source Program Jargon Level
 
-This metric counts occurrences of DSL-specific identifiers and operators in `Contracts/*.hs`, approximating the vocabulary a reader must learn. Each file is parsed and every name reference is checked against a curated jargon list for its DSL. Only library-imported tokens count: user-defined helpers (e.g. `pcheck`) and user-defined types (e.g. `PVestingDatum`) are excluded, as are pragmas, headers, imports, and comments. The per-line density column uses eLOC from the previous section as the denominator.
+This metric counts occurrences of DSL-specific identifiers and operators in `Contracts/*.hs`, approximating the vocabulary a reader must learn. Each file is parsed and every name reference is checked against a curated jargon list for its DSL. Only library-imported tokens count: user-defined helpers (e.g. `pcheck`) and user-defined types (e.g. `PVestingDatum`) are excluded, as are pragmas, headers, imports, and comments. Two density columns are reported: jargon per eLOC (eLOC from the previous section) and jargon per source-code token, where a *source-code token* is any whitespace-separated word in the raw `.hs` file (split on spaces and newlines, no lexical analysis).
 
 The two curated lists are designed to be symmetric. Plutarch's term primitives (`plam`, `plet`, `pmatch`, `pif`, `pfix`, `pelimList`, `phoistAcyclic`, `pfromData`, `pasConstr`, `pfstBuiltin`, ...) are paired against Plinth's term primitives (`plinthc`, `unsafeFromBuiltinData`, `matchInterval`, `matchOutputDatum`, ...) and qualified-builtin prefixes (`BI.*`, `Builtins.*`, `DList.*`, `DMap.*`). Plutarch's operators (`#`, `#$`, `#==`, `#/=`, `#<`, `#<=`, `#>`, `#>=`, `#&&`, `#||`, `:-->`) have no Plinth analogue and contribute only to the Plutarch side. Every P-prefixed Plutarch ledger type (`PScriptContext`, `PTxInfo`, `PTxOut`, `PValue`, `PAddress`, `PPubKeyHash`, all `P{Spending,Voting,...}Script`, `PInterval`, `POutputDatum`, ...) has its unprefixed Plinth counterpart counted on the other side.
 
-| Validator      | Plutarch Jargon | Plinth Jargon | Jargon ratio | Plutarch /eLOC | Plinth /eLOC |
-|----------------|----------------:|--------------:|-------------:|---------------:|-------------:|
-| Smart Tokens   |            1724 |           350 |        0.20x |           1.75 |         0.61 |
-| Guardrail      |             266 |            44 |        0.17x |           1.32 |         0.49 |
-| Crowdfund      |             491 |           112 |        0.23x |           1.62 |         0.53 |
-| Vesting        |             295 |            89 |        0.30x |           1.48 |         0.57 |
-| SundaeSwap NFT |             576 |           106 |        0.18x |           1.67 |         0.48 |
-| Certifying     |             112 |            22 |        0.20x |           2.15 |         0.61 |
-| Voting         |             156 |            46 |        0.29x |           2.84 |         0.79 |
-| **Total**      |        **3620** |       **769** |    **0.21x** |       **1.69** |     **0.57** |
+| Validator      | Plutarch Jargon | Plinth Jargon | Jargon ratio | Plutarch /eLOC | Plinth /eLOC | Plutarch /tok | Plinth /tok |
+|----------------|----------------:|--------------:|-------------:|---------------:|-------------:|--------------:|------------:|
+| Smart Tokens   |            1724 |           350 |        0.20x |           1.75 |         0.61 |          0.36 |        0.14 |
+| Guardrail      |             266 |            44 |        0.17x |           1.32 |         0.49 |          0.30 |        0.06 |
+| Crowdfund      |             491 |           112 |        0.23x |           1.62 |         0.53 |          0.34 |        0.11 |
+| Vesting        |             295 |            89 |        0.30x |           1.48 |         0.57 |          0.31 |        0.10 |
+| SundaeSwap NFT |             576 |           106 |        0.18x |           1.67 |         0.48 |          0.33 |        0.09 |
+| Certifying     |             112 |            22 |        0.20x |           2.15 |         0.61 |          0.31 |        0.07 |
+| Voting         |             156 |            46 |        0.29x |           2.84 |         0.79 |          0.37 |        0.12 |
+| **Total**      |        **3620** |       **769** |    **0.21x** |       **1.69** |     **0.57** |      **0.34** |    **0.11** |
 
-The aggregate Plutarch program emits roughly three times as many jargon tokens per effective line of code as the aggregate Plinth program (1.69 vs 0.57), and 4.7 times the raw absolute count (3,620 vs 769) once the eLOC difference is folded in. The gap is consistent across every validator in the suite: Plutarch's per-eLOC density ranges from 1.32 to 2.84, Plinth's from 0.48 to 0.79. Voting is the only pair where Plinth's eLOC slightly exceeds Plutarch's, yet Plinth's jargon density there (0.79) is still less than a third of Plutarch's (2.84).
+The aggregate Plutarch program emits roughly three times as many jargon tokens per effective line of code as the aggregate Plinth program (1.69 vs 0.57), and 4.7 times the raw absolute count (3,620 vs 769) once the eLOC difference is folded in. The gap is consistent across every validator in the suite: Plutarch's per-eLOC density ranges from 1.32 to 2.84, Plinth's from 0.48 to 0.79. Voting is the only pair where Plinth's eLOC slightly exceeds Plutarch's, yet Plinth's jargon density there (0.79) is still less than a third of Plutarch's (2.84). The per-token density tells the same story at a finer grain: more than one in three Plutarch source tokens (0.34) is a DSL-specific identifier or operator, against roughly one in nine on the Plinth side (0.11) — a 3.1x gap that holds up regardless of how concisely or verbosely each language packs symbols onto a line.
 
 ### Execution Cost &mdash; Per-Scenario
 
